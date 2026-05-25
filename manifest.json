@@ -1,20 +1,22 @@
 {
-  "id": "my-app",
-  "name": "My App",
+  "id": "dues-contributions",
+  "name": "Dues & Contributions",
   "version": "1.0.0",
-  "description": "A short description of what this app does.",
+  "description": "Track HOA dues collection — billing periods, per-member payment status, allocation rules that post immediately to reserve funds when dues are recorded, and period close reconciliation.",
   "entrypoint": "index.html",
   "runtime": "static",
-  "category": "tools",
-  "tags": [],
+  "category": "finance",
+  "tags": ["hoa", "dues", "payments", "finance", "board"],
+  "exports": [],
   "data_access": {
-    "reads": [],
-    "writes": []
+    "reads": ["family.members", "app.reserve-fund.funds-list"],
+    "writes": ["app.reserve-fund.transactions"]
   },
   "permissions": {
     "default_audience": "everyone",
-    "requires_approval": false
+    "requires_approval": true
   },
-  "storage": "none",
-  "icon": "🔧"
+  "storage": "kv",
+  "icon": "💳",
+  "nav": { "label": "Dues" }
 }
