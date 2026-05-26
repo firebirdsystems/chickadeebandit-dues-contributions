@@ -456,9 +456,9 @@ async function postAllocationEntries(payment, period, reversal = false, reversal
       description: reversal
         ? `Reversal — ${memberName} (${period.label}) → ${fundName} (${rule.percent}%)`
         : `Dues — ${memberName} (${period.label}) → ${fundName} (${rule.percent}%)`,
+      fundId: rule.fundId,
       source: APP_ID,
       sourceRef: payment.id,
-      destinationRef: rule.fundId,
       postedBy: ME?.name ?? "System",
       postedAt: new Date().toISOString(),
       reversal,
