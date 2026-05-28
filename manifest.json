@@ -2,10 +2,10 @@
   "id": "dues-contributions",
   "name": "Dues & Contributions",
   "version": "1.0.0",
-  "description": "Track HOA dues collection — billing periods, per-member payment status, allocation rules that post immediately to reserve funds when dues are recorded, and period close reconciliation.",
+  "description": "Track organization dues collection — billing periods, per-member payment status, allocation rules that post immediately to reserve funds when dues are recorded, and period close reconciliation.",
   "entrypoint": "index.html",
   "runtime": "static",
-  "category": "finance",
+  "category": "organization",
   "tags": ["hoa", "dues", "payments", "finance", "board"],
   "exports": [],
   "data_access": {
