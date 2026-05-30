@@ -1106,6 +1106,16 @@ window.deleteAssessmentInModal = async function(id) {
   renderAssessmentsModal();
 };
 
+// ── Deep link ──────────────────────────────────────────────────────────────
+function handleDeepLink() {
+  const periodId = new URLSearchParams(window.location.search).get("periodId");
+  if (!periodId) return;
+  if (data.periods.find(p => p.id === periodId)) {
+    selectedPeriodId = periodId;
+    render();
+  }
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
 (async () => {
   await Promise.all([loadMembers(), loadData(), loadFundsList()]);
@@ -1114,6 +1124,7 @@ window.deleteAssessmentInModal = async function(id) {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0].id;
   }
   render();
+  handleDeepLink();
 })();
 </script>
 </body>
