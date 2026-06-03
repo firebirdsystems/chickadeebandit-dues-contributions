@@ -336,6 +336,48 @@ let fundsList = [];
 let data      = { periods: [], payments: [], assessments: [] };
 let selectedPeriodId = null;
 
+// ── Indexes (rebuilt once after load; updated incrementally on mutations) ──
+let membersMap            = new Map(); // id → member
+let paymentsByPeriod      = new Map(); // periodId → Payment[]
+let paymentsByPeriodMember = new Map(); // periodId → Map(memberId → Payment[])
+
+function rebuildIndexes() {
+  membersMap = new Map(members.map(m => [m.id, m]));
+  paymentsByPeriod = new Map();
+  paymentsByPeriodMember = new Map();
+  for (const p of data.payments) {
+    if (!paymentsByPeriod.has(p.periodId)) paymentsByPeriod.set(p.periodId, []);
+    paymentsByPeriod.get(p.periodId).push(p);
+    if (!paymentsByPeriodMember.has(p.periodId)) paymentsByPeriodMember.set(p.periodId, new Map());
+    const byMember = paymentsByPeriodMember.get(p.periodId);
+    if (!byMember.has(p.memberId)) byMember.set(p.memberId, []);
+    byMember.get(p.memberId).push(p);
+  }
+}
+
+function addPaymentToIndex(payment) {
+  const { periodId, memberId } = payment;
+  if (!paymentsByPeriod.has(periodId)) paymentsByPeriod.set(periodId, []);
+  paymentsByPeriod.get(periodId).push(payment);
+  if (!paymentsByPeriodMember.has(periodId)) paymentsByPeriodMember.set(periodId, new Map());
+  const byMember = paymentsByPeriodMember.get(periodId);
+  if (!byMember.has(memberId)) byMember.set(memberId, []);
+  byMember.get(memberId).push(payment);
+}
+
+function removePaymentFromIndex(paymentId, periodId, memberId) {
+  const periodList = paymentsByPeriod.get(periodId);
+  if (periodList) {
+    const i = periodList.findIndex(p => p.id === paymentId);
+    if (i !== -1) periodList.splice(i, 1);
+  }
+  const memberList = paymentsByPeriodMember.get(periodId)?.get(memberId);
+  if (memberList) {
+    const i = memberList.findIndex(p => p.id === paymentId);
+    if (i !== -1) memberList.splice(i, 1);
+  }
+}
+
 // ── Modal ──────────────────────────────────────────────────────────────────
 let modalEl = null;
 function openModal(html) {
@@ -442,7 +484,7 @@ function getDemoData() {
 async function postAllocationEntries(payment, period, reversal = false, reversalOf = null) {
   const rules = period.allocationRules ?? [];
   if (!rules.length) return;
-  const member = members.find(m => m.id === payment.memberId);
+  const member = membersMap.get(payment.memberId);
   const memberName = member?.name ?? "Unknown Member";
   const ops = [];
   for (const rule of rules) {
@@ -476,11 +518,15 @@ async function postAllocationEntries(payment, period, reversal = false, reversal
 
 // ── Period helpers ─────────────────────────────────────────────────────────
 function getPeriodPayments(periodId) {
-  return data.payments.filter(p => p.periodId === periodId);
+  return paymentsByPeriod.get(periodId) ?? [];
+}
+
+function getMemberPayments(periodId, memberId) {
+  return paymentsByPeriodMember.get(periodId)?.get(memberId) ?? [];
 }
 
 function getMemberStatus(memberId, period) {
-  const pmts = getPeriodPayments(period.id).filter(p => p.memberId === memberId);
+  const pmts = getMemberPayments(period.id, memberId);
   const totalPaid = pmts.reduce((s, p) => s + Number(p.amount), 0);
   const due = Number(period.amountDue);
   const late = period.dueDate && todayStr() > period.dueDate;
@@ -489,11 +535,18 @@ function getMemberStatus(memberId, period) {
   return { status: late ? "overdue" : "pending", totalPaid };
 }
 
+let _statsCache = { key: null, stats: null };
+
 function getPeriodStats(period) {
+  const pmts = getPeriodPayments(period.id);
+  const key = `${period.id}:${pmts.length}`;
+  if (_statsCache.key === key) return _statsCache.stats;
   const paidCount      = members.filter(m => getMemberStatus(m.id, period).status === "paid").length;
-  const totalCollected = getPeriodPayments(period.id).reduce((s, p) => s + Number(p.amount), 0);
+  const totalCollected = pmts.reduce((s, p) => s + Number(p.amount), 0);
   const totalExpected  = members.length * Number(period.amountDue);
-  return { paidCount, totalMembers: members.length, totalCollected, totalExpected };
+  const stats = { paidCount, totalMembers: members.length, totalCollected, totalExpected };
+  _statsCache = { key, stats };
+  return stats;
 }
 
 function allocTotal(rules) {
@@ -566,12 +619,12 @@ function renderMain() {
       </div>
       <div class="summary-stats">
         <div class="stat"><div class="stat-label">Amount Due</div><div class="stat-value">${fmtDollars(period.amountDue)}</div></div>
-        <div class="stat"><div class="stat-label">Collected</div><div class="stat-value">${fmtDollars(stats.totalCollected)}</div></div>
+        <div class="stat"><div class="stat-label">Collected</div><div class="stat-value" id="stat-collected">${fmtDollars(stats.totalCollected)}</div></div>
         <div class="stat"><div class="stat-label">Expected</div><div class="stat-value">${fmtDollars(stats.totalExpected)}</div></div>
-        <div class="stat"><div class="stat-label">Paid Members</div><div class="stat-value">${stats.paidCount} / ${stats.totalMembers}</div></div>
+        <div class="stat"><div class="stat-label">Paid Members</div><div class="stat-value" id="stat-paid-count">${stats.paidCount} / ${stats.totalMembers}</div></div>
       </div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-      <div class="period-meta">Due ${fmtDate(period.dueDate)} &nbsp;&#xB7;&nbsp; ${pct}% collected</div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:${pct}%"></div></div>
+      <div class="period-meta" id="period-meta">Due ${fmtDate(period.dueDate)} &nbsp;&#xB7;&nbsp; ${pct}% collected</div>
     </div>
 
     ${buildMemberRoster(period, visibleMembers, locked)}
@@ -580,29 +633,30 @@ function renderMain() {
   `;
 }
 
+function buildMemberRow(m, period, locked) {
+  const { status, totalPaid } = getMemberStatus(m.id, period);
+  const bc = { paid: "badge-paid", partial: "badge-partial", overdue: "badge-overdue", pending: "badge-pending" }[status] ?? "badge-pending";
+  const pmts = getMemberPayments(period.id, m.id);
+  const history = pmts.map(p =>
+    `<div>${fmtDate(p.date)}: ${fmtDollars(p.amount)}${isBoard && !locked
+      ? ` <button class="btn btn-sm btn-danger" style="padding:1px 6px;font-size:0.7rem" onclick="deletePayment('${esc(p.id)}')">&#x2715;</button>`
+      : ""}</div>`
+  ).join("");
+  const color = memberColor(m.id, members);
+  const ini = initial(m.name);
+  return `<tr id="row-${esc(m.id)}">
+    <td><span class="member-avatar" style="background:${color}">${esc(ini)}</span>${esc(m.name)}</td>
+    <td class="amount-col">${fmtDollars(period.amountDue)}</td>
+    <td class="amount-col">${fmtDollars(totalPaid)}</td>
+    <td><span class="badge ${bc}">${status}</span></td>
+    <td class="payment-detail">${history || "<span style='color:var(--hub-text-muted,#9ca3af)'>none</span>"}</td>
+    ${isBoard ? `<td class="actions-col">${!locked ? `<button class="btn btn-sm btn-primary" onclick="openRecordPaymentModal('${esc(m.id)}')">Record Payment</button>` : ""}</td>` : ""}
+  </tr>`;
+}
+
 function buildMemberRoster(period, visibleMembers, locked) {
   if (!visibleMembers.length) return "";
-  const rows = visibleMembers.map(m => {
-    const { status, totalPaid } = getMemberStatus(m.id, period);
-    const bc = { paid: "badge-paid", partial: "badge-partial", overdue: "badge-overdue", pending: "badge-pending" }[status] ?? "badge-pending";
-    const pmts = getPeriodPayments(period.id).filter(p => p.memberId === m.id);
-    const history = pmts.map(p =>
-      `<div>${fmtDate(p.date)}: ${fmtDollars(p.amount)}${isBoard && !locked
-        ? ` <button class="btn btn-sm btn-danger" style="padding:1px 6px;font-size:0.7rem" onclick="deletePayment('${esc(p.id)}')">&#x2715;</button>`
-        : ""}</div>`
-    ).join("");
-    const color = memberColor(m.id, members);
-    const ini = initial(m.name);
-    return `<tr>
-      <td><span class="member-avatar" style="background:${color}">${esc(ini)}</span>${esc(m.name)}</td>
-      <td class="amount-col">${fmtDollars(period.amountDue)}</td>
-      <td class="amount-col">${fmtDollars(totalPaid)}</td>
-      <td><span class="badge ${bc}">${status}</span></td>
-      <td class="payment-detail">${history || "<span style='color:var(--hub-text-muted,#9ca3af)'>none</span>"}</td>
-      ${isBoard ? `<td class="actions-col">${!locked ? `<button class="btn btn-sm btn-primary" onclick="openRecordPaymentModal('${esc(m.id)}')">Record Payment</button>` : ""}</td>` : ""}
-    </tr>`;
-  }).join("");
-
+  const rows = visibleMembers.map(m => buildMemberRow(m, period, locked)).join("");
   return `<div class="section">
     <div class="section-header"><h3>Member Payments</h3></div>
     <table>
@@ -658,6 +712,26 @@ function buildAssessmentsSection() {
       <tbody>${rows}</tbody>
     </table>
   </div>`;
+}
+
+// ── Targeted DOM patch (record/delete payment only) ────────────────────────
+function patchAfterPayment(memberId, period) {
+  const tr = document.getElementById(`row-${memberId}`);
+  if (!tr) { render(); return; }
+  const m = membersMap.get(memberId);
+  if (!m) { render(); return; }
+  tr.outerHTML = buildMemberRow(m, period, period.status === "locked");
+
+  const stats = getPeriodStats(period);
+  const pct = stats.totalExpected > 0 ? Math.min(100, Math.round(100 * stats.totalCollected / stats.totalExpected)) : 0;
+  const elCollected = document.getElementById("stat-collected");
+  const elPaidCount = document.getElementById("stat-paid-count");
+  const elProgress  = document.getElementById("progress-fill");
+  const elMeta      = document.getElementById("period-meta");
+  if (elCollected) elCollected.textContent = fmtDollars(stats.totalCollected);
+  if (elPaidCount) elPaidCount.textContent = `${stats.paidCount} / ${stats.totalMembers}`;
+  if (elProgress)  elProgress.style.width = `${pct}%`;
+  if (elMeta)      elMeta.innerHTML = `Due ${fmtDate(period.dueDate)} &nbsp;&#xB7;&nbsp; ${pct}% collected`;
 }
 
 // ── Period CRUD ────────────────────────────────────────────────────────────
@@ -849,7 +923,7 @@ function openReconModal(period) {
 window.openRecordPaymentModal = function(memberId) {
   const period = data.periods.find(p => p.id === selectedPeriodId);
   if (!period) return;
-  const member = members.find(m => m.id === memberId);
+  const member = membersMap.get(memberId);
   const { totalPaid } = getMemberStatus(memberId, period);
   const remaining = Math.max(0, Number(period.amountDue) - totalPaid);
   const noFunds = !period.allocationRules?.length;
@@ -897,9 +971,10 @@ window.submitPayment = async function(memberId) {
       amount, date, recordedBy: ME?.name ?? "Board", recordedAt: new Date().toISOString(),
     };
     data.payments.push(payment);
+    addPaymentToIndex(payment);
     await Promise.all([saveData(), postAllocationEntries(payment, period)]);
     closeModal();
-    render();
+    patchAfterPayment(memberId, period);
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Record Payment"; }
     throw e;
@@ -909,8 +984,9 @@ window.submitPayment = async function(memberId) {
 window.deletePayment = async function(paymentId) {
   const payment = data.payments.find(p => p.id === paymentId);
   if (!payment) return;
-  const member = members.find(m => m.id === payment.memberId);
-  const period = data.periods.find(p => p.id === payment.periodId);
+  const { memberId, periodId } = payment;
+  const member = membersMap.get(memberId);
+  const period = data.periods.find(p => p.id === periodId);
   const confirmed = await hubConfirm({
     message: "Delete this payment?",
     description: `${fmtDollars(payment.amount)} from ${member?.name ?? "member"} on ${fmtDate(payment.date)}. Reversal entries will be posted to reserve funds.`,
@@ -919,11 +995,16 @@ window.deletePayment = async function(paymentId) {
   });
   if (!confirmed) return;
   data.payments = data.payments.filter(p => p.id !== paymentId);
+  removePaymentFromIndex(paymentId, periodId, memberId);
   await Promise.all([
     saveData(),
     period ? postAllocationEntries(payment, period, true, paymentId) : Promise.resolve(),
   ]);
-  render();
+  if (period && period.id === selectedPeriodId) {
+    patchAfterPayment(memberId, period);
+  } else {
+    render();
+  }
 };
 
 // ── Allocation rules ───────────────────────────────────────────────────────
@@ -1119,6 +1200,7 @@ function handleDeepLink() {
 // ── Init ───────────────────────────────────────────────────────────────────
 (async () => {
   await Promise.all([loadMembers(), loadData(), loadFundsList()]);
+  rebuildIndexes();
   if (data.periods.length) {
     selectedPeriodId = [...data.periods]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0].id;
