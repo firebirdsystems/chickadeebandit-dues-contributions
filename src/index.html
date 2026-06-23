@@ -323,11 +323,13 @@ import { esc, hubConfirm, crossWrite, memberColor, initial } from "/hub-sdk.js";
 
 const CONTEXT         = window.__CONTEXT_URL     ?? "";
 const STORE           = window.__STORE_URL       ?? "";
+const DB              = window.__DB_URL           ?? "";
+const ADMIN_CONFIG    = window.__ADMIN_CONFIG_URL ?? "";
 const APP_ID          = window.__APP_ID          ?? "dues-contributions";
 const ME              = window.__CURRENT_MEMBER  ?? null;
-const isBoard         = ME?.role === "board" || ME?.isAdmin;
+const IS_ADMIN        = !!ME?.isAdmin;
+const DEMO            = !DB;
 
-const STORE_KEY      = "dues-contributions-data";
 const RESERVE_APP_ID = "reserve-fund";
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -335,6 +337,33 @@ let members   = [];
 let fundsList = [];
 let data      = { periods: [], payments: [], assessments: [] };
 let selectedPeriodId = null;
+let groups       = [];     // family.groups [{ id, name, memberIds }]
+let boardGroupId = "";     // configured Board group (gates writes server-side)
+
+// Board WRITE actions require membership in the configured Board group — exactly
+// what the server's row policies enforce (admin status alone does not satisfy a
+// row policy). Configuring the group is separate and admin-only (openBoardConfig).
+function amIBoard() {
+  if (DEMO) return true;
+  if (!boardGroupId || !ME) return false;
+  const g = groups.find(g => g.id === boardGroupId);
+  return !!g && g.memberIds.includes(ME.id);
+}
+
+// ── DB helper ────────────────────────────────────────────────────────────────
+async function db(sql, params = []) {
+  if (!DB) return { rows: [] };
+  const res = await fetch(DB, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql, params }),
+  });
+  if (!res.ok) {
+    let msg = `DB error ${res.status}`;
+    try { msg = (await res.json()).error ?? msg; } catch {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
 
 // ── Indexes (rebuilt once after load; updated incrementally on mutations) ──
 let membersMap            = new Map(); // id → member
@@ -405,35 +434,46 @@ function fmtDate(iso) {
 }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
-// ── KV helpers ─────────────────────────────────────────────────────────────
+// ── Data loading (D1) ────────────────────────────────────────────────────────
 async function loadData() {
-  if (!STORE) { data = getDemoData(); return; }
-  try {
-    const res = await fetch(`${STORE}?key=${STORE_KEY}`);
-    if (!res.ok) return;
-    const { value } = await res.json();
-    if (value) {
-      const p = JSON.parse(value);
-      data = { periods: p.periods ?? [], payments: p.payments ?? [], assessments: p.assessments ?? [] };
-    }
-  } catch { /* non-fatal */ }
+  if (DEMO) { data = getDemoData(); return; }
+  const [perRows, payRows, assRows, setRows] = await Promise.all([
+    db("SELECT * FROM app_dues_contributions__periods"),
+    db("SELECT * FROM app_dues_contributions__payments"),
+    db("SELECT * FROM app_dues_contributions__assessments"),
+    db("SELECT value FROM app_dues_contributions__settings WHERE key = 'board_group_id'"),
+  ]);
+  data.periods = (perRows.rows ?? []).map(r => ({
+    id: r.id, label: r.label, dueDate: r.due_date ?? null, amountDue: r.amount_due ?? 0,
+    status: r.status ?? "open",
+    allocationRules: safeParse(r.allocation_rules, []),
+    reconciliation: safeParse(r.reconciliation, null),
+    closedAt: r.closed_at ?? null, closedBy: r.closed_by ?? null, createdAt: r.created_at,
+  }));
+  data.payments = (payRows.rows ?? []).map(r => ({
+    id: r.id, periodId: r.period_id, memberId: r.member_id, amount: r.amount ?? 0,
+    date: r.date, recordedBy: r.recorded_by, recordedAt: r.recorded_at,
+  }));
+  data.assessments = (assRows.rows ?? []).map(r => ({
+    id: r.id, label: r.label, amount: r.amount ?? 0, dueDate: r.due_date ?? null,
+    memberIds: safeParse(r.member_ids, ["all"]), createdAt: r.created_at,
+  }));
+  boardGroupId = setRows.rows?.[0]?.value ?? "";
 }
 
-async function saveData() {
-  if (!STORE) return;
-  await fetch(STORE, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: STORE_KEY, value: JSON.stringify(data) }),
-  });
+function safeParse(v, fallback) {
+  if (v == null || v === "") return fallback;
+  try { return JSON.parse(v); } catch { return fallback; }
 }
 
 async function loadMembers() {
   if (!CONTEXT) { members = getDemoMembers(); return; }
   try {
-    const res = await fetch(`${CONTEXT}?keys=family.members`);
-    members = ((await res.json())["family.members"]) ?? [];
-  } catch { members = []; }
+    const res = await fetch(`${CONTEXT}?keys=family.members,family.groups`);
+    const ctx = await res.json();
+    members = ctx["family.members"] ?? [];
+    groups  = ctx["family.groups"] ?? [];
+  } catch { members = []; groups = []; }
 }
 
 async function loadFundsList() {
@@ -578,20 +618,63 @@ function populatePeriodSelect() {
 
 function renderHeaderActions() {
   const wrap = document.getElementById("header-actions");
-  if (!isBoard) { wrap.innerHTML = ""; return; }
+  // Admin-only Board config entry (sets board_group_id via the admin endpoint).
+  const configBtn = IS_ADMIN ? `<button class="btn btn-sm" onclick="openBoardConfig()">⚙︎ Board</button>` : "";
+  if (!amIBoard()) { wrap.innerHTML = configBtn; return; }
   const hasRuleBtn = fundsList.length ? `<button class="btn btn-sm" onclick="openAllocRulesModal()">Allocation Rules</button>` : "";
   wrap.innerHTML = `
     <button class="btn btn-sm btn-primary" onclick="openNewPeriodModal()">+ Period</button>
     <button class="btn btn-sm" onclick="openAssessmentsModal()">Assessments</button>
     ${hasRuleBtn}
+    ${configBtn}
   `;
 }
+
+// ── Board group configuration (admin-only) ──────────────────────────────────
+window.openBoardConfig = function() {
+  if (!IS_ADMIN) return;
+  const opts = groups.map(g => `<option value="${esc(g.id)}"${g.id === boardGroupId ? " selected" : ""}>${esc(g.name)}</option>`).join("");
+  openModal(`
+    <h2>Configure Board Group</h2>
+    <div class="form-group">
+      <label>Board group</label>
+      <select id="bc-group">
+        <option value="">— none —</option>
+        ${opts}
+      </select>
+      <div class="form-hint" style="margin-top:6px">Members of this group may create periods, record payments, set allocation rules, and close periods. For allocations to post, use the same Board group in the Reserve Fund app. Manage group membership in the hub's member settings.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBoardConfig()">Save</button>
+    </div>
+  `);
+};
+
+window.saveBoardConfig = async function() {
+  const groupId = document.getElementById("bc-group").value;
+  const btn = modalEl?.querySelector(".btn-primary");
+  if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+  try {
+    const res = await fetch(ADMIN_CONFIG, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "board_group_id", value: groupId }),
+    });
+    if (!res.ok) { let m = "Save failed"; try { m = (await res.json()).error ?? m; } catch {} throw new Error(m); }
+    boardGroupId = groupId;
+    closeModal();
+    render();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Save"; }
+    alert(e.message ?? "Save failed");
+  }
+};
 
 function renderMain() {
   const el = document.getElementById("main-content");
   const period = data.periods.find(p => p.id === selectedPeriodId);
   if (!period) {
-    el.innerHTML = `<div class="empty">${isBoard
+    el.innerHTML = `<div class="empty">${amIBoard()
       ? `No billing periods yet. <button class="btn btn-sm btn-primary" style="margin-left:8px" onclick="openNewPeriodModal()">Create a Period</button>`
       : "No billing periods have been created yet."
     }</div>`;
@@ -602,9 +685,9 @@ function renderMain() {
   const pct    = stats.totalExpected > 0 ? Math.min(100, Math.round(100 * stats.totalCollected / stats.totalExpected)) : 0;
   const locked = period.status === "locked";
 
-  const visibleMembers = isBoard ? members : members.filter(m => m.id === ME?.id);
+  const visibleMembers = amIBoard() ? members : members.filter(m => m.id === ME?.id);
 
-  const summaryActions = isBoard && !locked
+  const summaryActions = amIBoard() && !locked
     ? `<button class="btn btn-sm" style="margin-left:auto" onclick="openEditPeriodModal()">Edit</button>
        <button class="btn btn-sm" onclick="closePeriod()">Close Period</button>
        <button class="btn btn-sm btn-danger" onclick="deletePeriod()">Delete</button>`
@@ -628,8 +711,8 @@ function renderMain() {
     </div>
 
     ${buildMemberRoster(period, visibleMembers, locked)}
-    ${isBoard ? buildAllocSection(period) : ""}
-    ${isBoard ? buildAssessmentsSection() : ""}
+    ${amIBoard() ? buildAllocSection(period) : ""}
+    ${amIBoard() ? buildAssessmentsSection() : ""}
   `;
 }
 
@@ -638,7 +721,7 @@ function buildMemberRow(m, period, locked) {
   const bc = { paid: "badge-paid", partial: "badge-partial", overdue: "badge-overdue", pending: "badge-pending" }[status] ?? "badge-pending";
   const pmts = getMemberPayments(period.id, m.id);
   const history = pmts.map(p =>
-    `<div>${fmtDate(p.date)}: ${fmtDollars(p.amount)}${isBoard && !locked
+    `<div>${fmtDate(p.date)}: ${fmtDollars(p.amount)}${amIBoard() && !locked
       ? ` <button class="btn btn-sm btn-danger" style="padding:1px 6px;font-size:0.7rem" onclick="deletePayment('${esc(p.id)}')">&#x2715;</button>`
       : ""}</div>`
   ).join("");
@@ -650,7 +733,7 @@ function buildMemberRow(m, period, locked) {
     <td class="amount-col">${fmtDollars(totalPaid)}</td>
     <td><span class="badge ${bc}">${status}</span></td>
     <td class="payment-detail">${history || "<span style='color:var(--hub-text-muted,#9ca3af)'>none</span>"}</td>
-    ${isBoard ? `<td class="actions-col">${!locked ? `<button class="btn btn-sm btn-primary" onclick="openRecordPaymentModal('${esc(m.id)}')">Record Payment</button>` : ""}</td>` : ""}
+    ${amIBoard() ? `<td class="actions-col">${!locked ? `<button class="btn btn-sm btn-primary" onclick="openRecordPaymentModal('${esc(m.id)}')">Record Payment</button>` : ""}</td>` : ""}
   </tr>`;
 }
 
@@ -662,7 +745,7 @@ function buildMemberRoster(period, visibleMembers, locked) {
     <table>
       <thead><tr>
         <th>Member</th><th class="amount-col">Due</th><th class="amount-col">Paid</th>
-        <th>Status</th><th>History</th>${isBoard ? "<th></th>" : ""}
+        <th>Status</th><th>History</th>${amIBoard() ? "<th></th>" : ""}
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -776,18 +859,20 @@ window.submitNewPeriod = async function() {
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Creating…"; }
   try {
-    const period = {
-      id: crypto.randomUUID(), label, dueDate: due || null, amountDue: amount,
-      status: "open", allocationRules: [], createdAt: new Date().toISOString(),
-    };
-    data.periods.push(period);
-    selectedPeriodId = period.id;
-    await saveData();
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    // created_by is forced to the caller by the row policy; pass it as a bound (?).
+    await db(
+      "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due, status, allocation_rules, visibility, created_by, created_at) VALUES (?,?,?,?,'open','[]','everyone',?,?)",
+      [id, label, due || null, amount, "", createdAt],
+    );
+    data.periods.push({ id, label, dueDate: due || null, amountDue: amount, status: "open", allocationRules: [], reconciliation: null, createdAt });
+    selectedPeriodId = id;
     closeModal();
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Create Period"; }
-    throw e;
+    alert(e.message ?? "Create failed");
   }
 };
 
@@ -827,17 +912,20 @@ window.submitEditPeriod = async function() {
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   try {
     const period = data.periods.find(p => p.id === selectedPeriodId);
-    if (period) {
-      period.label   = label;
-      period.amountDue = isNaN(amount) ? period.amountDue : amount;
-      period.dueDate = due || null;
-    }
-    await saveData();
+    if (!period) return;
+    const newAmount = isNaN(amount) ? period.amountDue : amount;
+    await db(
+      "UPDATE app_dues_contributions__periods SET label=?, amount_due=?, due_date=? WHERE id=?",
+      [label, newAmount, due || null, period.id],
+    );
+    period.label = label;
+    period.amountDue = newAmount;
+    period.dueDate = due || null;
     closeModal();
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save"; }
-    throw e;
+    alert(e.message ?? "Save failed");
   }
 };
 
@@ -854,11 +942,17 @@ window.deletePeriod = async function() {
     destructive: true,
   });
   if (!confirmed) return;
-  data.periods  = data.periods.filter(p => p.id !== selectedPeriodId);
-  data.payments = data.payments.filter(p => p.periodId !== selectedPeriodId);
-  selectedPeriodId = data.periods[0]?.id ?? null;
-  await saveData();
-  render();
+  const pid = selectedPeriodId;
+  try {
+    // Delete child payments first, then the period.
+    await db("DELETE FROM app_dues_contributions__payments WHERE period_id=?", [pid]);
+    await db("DELETE FROM app_dues_contributions__periods WHERE id=?", [pid]);
+    data.periods  = data.periods.filter(p => p.id !== pid);
+    data.payments = data.payments.filter(p => p.periodId !== pid);
+    rebuildIndexes();
+    selectedPeriodId = data.periods[0]?.id ?? null;
+    render();
+  } catch (e) { alert(e.message ?? "Delete failed"); }
 };
 
 window.closePeriod = async function() {
@@ -875,12 +969,9 @@ window.closePeriod = async function() {
   });
   if (!confirmed) return;
 
-  period.status   = "locked";
-  period.closedAt = new Date().toISOString();
-  period.closedBy = ME?.name ?? "Board";
-
+  const closedAt = new Date().toISOString();
   const stats = getPeriodStats(period);
-  period.reconciliation = {
+  const reconciliation = {
     totalExpected:  stats.totalExpected,
     totalCollected: stats.totalCollected,
     overdueMembers: members
@@ -889,12 +980,21 @@ window.closePeriod = async function() {
         const { totalPaid } = getMemberStatus(m.id, period);
         return { id: m.id, name: m.name, totalPaid, balance: Number(period.amountDue) - totalPaid };
       }),
-    closedAt: period.closedAt,
+    closedAt,
   };
 
-  await saveData();
-  render();
-  openReconModal(period);
+  try {
+    await db(
+      "UPDATE app_dues_contributions__periods SET status='locked', closed_at=?, closed_by=?, reconciliation=? WHERE id=?",
+      [closedAt, ME?.name ?? "Board", JSON.stringify(reconciliation), period.id],
+    );
+    period.status = "locked";
+    period.closedAt = closedAt;
+    period.closedBy = ME?.name ?? "Board";
+    period.reconciliation = reconciliation;
+    render();
+    openReconModal(period);
+  } catch (e) { alert(e.message ?? "Close failed"); }
 };
 
 function openReconModal(period) {
@@ -970,14 +1070,21 @@ window.submitPayment = async function(memberId) {
       id: crypto.randomUUID(), memberId, periodId: selectedPeriodId,
       amount, date, recordedBy: ME?.name ?? "Board", recordedAt: new Date().toISOString(),
     };
+    // member_id records WHO paid (data only); created_by (forced by policy to the
+    // board recorder) is the owner column, so a payer can never write their own row.
+    await db(
+      "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount, date, recorded_by, recorded_at, visibility, created_by) VALUES (?,?,?,?,?,?,?,'everyone',?)",
+      [payment.id, payment.periodId, memberId, amount, date, payment.recordedBy, payment.recordedAt, ""],
+    );
     data.payments.push(payment);
     addPaymentToIndex(payment);
-    await Promise.all([saveData(), postAllocationEntries(payment, period)]);
     closeModal();
     patchAfterPayment(memberId, period);
+    // Post allocations to the reserve fund (cross-write is gated to the board group).
+    postAllocationEntries(payment, period);
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Record Payment"; }
-    throw e;
+    alert(e.message ?? "Record failed");
   }
 };
 
@@ -994,17 +1101,17 @@ window.deletePayment = async function(paymentId) {
     destructive: true,
   });
   if (!confirmed) return;
-  data.payments = data.payments.filter(p => p.id !== paymentId);
-  removePaymentFromIndex(paymentId, periodId, memberId);
-  await Promise.all([
-    saveData(),
-    period ? postAllocationEntries(payment, period, true, paymentId) : Promise.resolve(),
-  ]);
-  if (period && period.id === selectedPeriodId) {
-    patchAfterPayment(memberId, period);
-  } else {
-    render();
-  }
+  try {
+    await db("DELETE FROM app_dues_contributions__payments WHERE id=?", [paymentId]);
+    data.payments = data.payments.filter(p => p.id !== paymentId);
+    removePaymentFromIndex(paymentId, periodId, memberId);
+    if (period) postAllocationEntries(payment, period, true, paymentId);
+    if (period && period.id === selectedPeriodId) {
+      patchAfterPayment(memberId, period);
+    } else {
+      render();
+    }
+  } catch (e) { alert(e.message ?? "Delete failed"); }
 };
 
 // ── Allocation rules ───────────────────────────────────────────────────────
@@ -1082,15 +1189,16 @@ window.saveAllocRules = async function() {
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   try {
-    period.allocationRules = (window._workingRules ?? []).filter(r => r.fundId && r.percent > 0);
-    await saveData();
+    const rules = (window._workingRules ?? []).filter(r => r.fundId && r.percent > 0);
+    await db("UPDATE app_dues_contributions__periods SET allocation_rules=? WHERE id=?", [JSON.stringify(rules), period.id]);
+    period.allocationRules = rules;
     window._workingRules = null;
     window._allocPeriodId = null;
     closeModal();
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save Rules"; }
-    throw e;
+    alert(e.message ?? "Save failed");
   }
 };
 
@@ -1154,16 +1262,18 @@ window.submitNewAssessment = async function() {
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Creating…"; }
   try {
-    data.assessments.push({
-      id: crypto.randomUUID(), label, amount, dueDate: due || null,
-      memberIds: ["all"], createdAt: new Date().toISOString(),
-    });
-    await saveData();
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    await db(
+      "INSERT INTO app_dues_contributions__assessments (id, label, amount, due_date, member_ids, visibility, created_by, created_at) VALUES (?,?,?,?,'[\"all\"]','everyone',?,?)",
+      [id, label, amount, due || null, "", createdAt],
+    );
+    data.assessments.push({ id, label, amount, dueDate: due || null, memberIds: ["all"], createdAt });
     closeModal();
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Create"; }
-    throw e;
+    alert(e.message ?? "Create failed");
   }
 };
 
@@ -1172,9 +1282,11 @@ window.deleteAssessment = async function(id) {
   if (!a) return;
   const ok = await hubConfirm({ message: `Delete assessment "${a.label}"?`, destructive: true });
   if (!ok) return;
-  data.assessments = data.assessments.filter(x => x.id !== id);
-  await saveData();
-  render();
+  try {
+    await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
+    data.assessments = data.assessments.filter(x => x.id !== id);
+    render();
+  } catch (e) { alert(e.message ?? "Delete failed"); }
 };
 
 window.deleteAssessmentInModal = async function(id) {
@@ -1182,9 +1294,11 @@ window.deleteAssessmentInModal = async function(id) {
   if (!a) return;
   const ok = await hubConfirm({ message: `Delete assessment "${a.label}"?`, destructive: true });
   if (!ok) return;
-  data.assessments = data.assessments.filter(x => x.id !== id);
-  await saveData();
-  renderAssessmentsModal();
+  try {
+    await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
+    data.assessments = data.assessments.filter(x => x.id !== id);
+    renderAssessmentsModal();
+  } catch (e) { alert(e.message ?? "Delete failed"); }
 };
 
 // ── Deep link ──────────────────────────────────────────────────────────────
