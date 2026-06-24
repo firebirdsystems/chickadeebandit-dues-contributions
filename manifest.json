@@ -17,40 +17,32 @@
     "requires_approval": true
   },
   "storage": "db",
+  "db_plaintext_columns": ["posting_status", "allocation_rules", "date"],
   "icon": "💳",
   "nav": { "label": "Dues" },
   "row_policies": {
     "settings": { "kind": "app_config" },
-    "periods": {
-      "kind": "owner_or_visibility",
-      "member_column": "created_by",
-      "visibility_column": "visibility",
-      "everyone_values": ["everyone"],
-      "write_owner_only": true,
-      "insert_privileged_only": true,
-      "bypass_group_setting": { "settings_table": "settings", "settings_key": "board_group_id" }
-    },
-    "payments": {
-      "kind": "owner_or_visibility",
-      "member_column": "created_by",
-      "visibility_column": "visibility",
-      "everyone_values": ["everyone"],
-      "write_owner_only": true,
-      "insert_privileged_only": true,
-      "bypass_group_setting": { "settings_table": "settings", "settings_key": "board_group_id" }
-    },
+    "periods": { "kind": "endpoint_only", "read": "everyone" },
+    "payments": { "kind": "endpoint_only", "read": "everyone" },
     "assessments": {
       "kind": "owner_or_visibility",
       "member_column": "created_by",
       "visibility_column": "visibility",
       "everyone_values": ["everyone"],
-      "write_owner_only": true,
-      "insert_privileged_only": true,
+      "write_privileged_only": true,
       "bypass_group_setting": { "settings_table": "settings", "settings_key": "board_group_id" }
     }
   },
   "admin_config": {
     "settings_table": "settings",
     "keys": ["board_group_id"]
+  },
+  "managed_finance": {
+    "settings_table": "settings",
+    "settings_key": "board_group_id",
+    "periods_table": "periods",
+    "payments_table": "payments",
+    "target_app_id": "reserve-fund",
+    "target_ledger": "transactions"
   }
 }

@@ -319,13 +319,13 @@
 </div>
 
 <script type="module">
-import { esc, hubConfirm, crossWrite, memberColor, initial } from "/hub-sdk.js";
+import { esc, hubConfirm, memberColor, initial } from "/hub-sdk.js";
 
 const CONTEXT         = window.__CONTEXT_URL     ?? "";
-const STORE           = window.__STORE_URL       ?? "";
 const DB              = window.__DB_URL           ?? "";
 const ADMIN_CONFIG    = window.__ADMIN_CONFIG_URL ?? "";
 const APP_ID          = window.__APP_ID          ?? "dues-contributions";
+const FINANCE_URL     = `/run/${APP_ID}/api/finance`;
 const ME              = window.__CURRENT_MEMBER  ?? null;
 const IS_ADMIN        = !!ME?.isAdmin;
 const DEMO            = !DB;
@@ -363,6 +363,16 @@ async function db(sql, params = []) {
     throw new Error(msg);
   }
   return res.json();
+}
+
+async function finance(resource, payload) {
+  const res = await fetch(`${FINANCE_URL}/${resource}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Finance error ${res.status}`);
+  return body;
 }
 
 // ── Indexes (rebuilt once after load; updated incrementally on mutations) ──
@@ -421,12 +431,17 @@ function closeModal() { modalEl?.remove(); modalEl = null; }
 window.closeModal = closeModal;
 
 // ── Formatting ─────────────────────────────────────────────────────────────
-function fmtDollars(val) {
-  if (val == null || val === "") return "—";
-  const n = Number(val);
-  if (isNaN(n)) return "—";
-  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+function fmtDollars(cents) {
+  if (cents == null || cents === "") return "—";
+  const n = Number(cents);
+  if (!Number.isFinite(n)) return "—";
+  return (n / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
+function toCents(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.round(amount * 100) : NaN;
+}
+function centsInput(cents) { return (Number(cents ?? 0) / 100).toFixed(2); }
 function fmtDate(iso) {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
@@ -444,18 +459,18 @@ async function loadData() {
     db("SELECT value FROM app_dues_contributions__settings WHERE key = 'board_group_id'"),
   ]);
   data.periods = (perRows.rows ?? []).map(r => ({
-    id: r.id, label: r.label, dueDate: r.due_date ?? null, amountDue: r.amount_due ?? 0,
+    id: r.id, label: r.label, dueDate: r.due_date ?? null, amountDueCents: r.amount_due_cents ?? 0,
     status: r.status ?? "open",
     allocationRules: safeParse(r.allocation_rules, []),
     reconciliation: safeParse(r.reconciliation, null),
-    closedAt: r.closed_at ?? null, closedBy: r.closed_by ?? null, createdAt: r.created_at,
+    closedAt: r.closed_at ?? null, closedById: r.closed_by_id ?? null, createdAt: r.created_at,
   }));
   data.payments = (payRows.rows ?? []).map(r => ({
-    id: r.id, periodId: r.period_id, memberId: r.member_id, amount: r.amount ?? 0,
-    date: r.date, recordedBy: r.recorded_by, recordedAt: r.recorded_at,
+    id: r.id, periodId: r.period_id, memberId: r.member_id, amountCents: r.amount_cents ?? 0,
+    date: r.date, postingStatus: r.posting_status, recordedById: r.recorded_by_id, recordedAt: r.recorded_at,
   }));
   data.assessments = (assRows.rows ?? []).map(r => ({
-    id: r.id, label: r.label, amount: r.amount ?? 0, dueDate: r.due_date ?? null,
+    id: r.id, label: r.label, amountCents: r.amount_cents ?? 0, dueDate: r.due_date ?? null,
     memberIds: safeParse(r.member_ids, ["all"]), createdAt: r.created_at,
   }));
   boardGroupId = setRows.rows?.[0]?.value ?? "";
@@ -505,55 +520,19 @@ function getDemoData() {
   const p1 = "p-demo-1";
   return {
     periods: [{
-      id: p1, label: "May 2026", dueDate: "2026-05-15", amountDue: 200, status: "open",
-      allocationRules: [{ fundId: "f1", percent: 60 }, { fundId: "f2", percent: 40 }],
+      id: p1, label: "May 2026", dueDate: "2026-05-15", amountDueCents: 20000, status: "open",
+      allocationRules: [{ fundId: "f1", basisPoints: 6000 }, { fundId: "f2", basisPoints: 4000 }],
       createdAt: "2026-05-01T00:00:00Z",
     }],
     payments: [
-      { id: "pay-demo-1", memberId: "m1", periodId: p1, amount: 200, date: "2026-05-03", recordedBy: "Alice Johnson", recordedAt: "2026-05-03T09:00:00Z" },
-      { id: "pay-demo-2", memberId: "m2", periodId: p1, amount: 100, date: "2026-05-05", recordedBy: "Alice Johnson", recordedAt: "2026-05-05T10:00:00Z" },
+      { id: "pay-demo-1", memberId: "m1", periodId: p1, amountCents: 20000, date: "2026-05-03", postingStatus: "posted", recordedAt: "2026-05-03T09:00:00Z" },
+      { id: "pay-demo-2", memberId: "m2", periodId: p1, amountCents: 10000, date: "2026-05-05", postingStatus: "posted", recordedAt: "2026-05-05T10:00:00Z" },
     ],
     assessments: [{
-      id: "a-demo-1", label: "2026 Special Assessment", amount: 500,
+      id: "a-demo-1", label: "2026 Special Assessment", amountCents: 50000,
       dueDate: "2026-06-01", memberIds: ["all"], createdAt: "2026-04-01T00:00:00Z",
     }],
   };
-}
-
-// ── Cross-writes to Reserve Fund ───────────────────────────────────────────
-async function postAllocationEntries(payment, period, reversal = false, reversalOf = null) {
-  const rules = period.allocationRules ?? [];
-  if (!rules.length) return;
-  const member = membersMap.get(payment.memberId);
-  const memberName = member?.name ?? "Unknown Member";
-  const ops = [];
-  for (const rule of rules) {
-    const fund = fundsList.find(f => f.id === rule.fundId);
-    const fundName = fund?.name ?? rule.fundId;
-    const allocAmount = Number(payment.amount) * (rule.percent / 100);
-    const entry = {
-      id: crypto.randomUUID(),
-      date: payment.date,
-      amount: reversal ? -allocAmount : allocAmount,
-      description: reversal
-        ? `Reversal — ${memberName} (${period.label}) → ${fundName} (${rule.percent}%)`
-        : `Dues — ${memberName} (${period.label}) → ${fundName} (${rule.percent}%)`,
-      fundId: rule.fundId,
-      source: APP_ID,
-      sourceRef: payment.id,
-      postedBy: ME?.name ?? "System",
-      postedAt: new Date().toISOString(),
-      reversal,
-      reversalOf,
-    };
-    ops.push({ op: "array_append", path: "items", value: entry });
-  }
-  if (!ops.length) return;
-  try {
-    await crossWrite(RESERVE_APP_ID, "transactions", ops);
-  } catch (e) {
-    console.warn("crossWrite to reserve-fund-dashboard failed:", e);
-  }
 }
 
 // ── Period helpers ─────────────────────────────────────────────────────────
@@ -567,8 +546,8 @@ function getMemberPayments(periodId, memberId) {
 
 function getMemberStatus(memberId, period) {
   const pmts = getMemberPayments(period.id, memberId);
-  const totalPaid = pmts.reduce((s, p) => s + Number(p.amount), 0);
-  const due = Number(period.amountDue);
+  const totalPaid = pmts.reduce((s, p) => s + Number(p.amountCents), 0);
+  const due = Number(period.amountDueCents);
   const late = period.dueDate && todayStr() > period.dueDate;
   if (totalPaid >= due) return { status: "paid", totalPaid };
   if (totalPaid > 0)    return { status: late ? "overdue" : "partial", totalPaid };
@@ -582,15 +561,15 @@ function getPeriodStats(period) {
   const key = `${period.id}:${pmts.length}`;
   if (_statsCache.key === key) return _statsCache.stats;
   const paidCount      = members.filter(m => getMemberStatus(m.id, period).status === "paid").length;
-  const totalCollected = pmts.reduce((s, p) => s + Number(p.amount), 0);
-  const totalExpected  = members.length * Number(period.amountDue);
+  const totalCollected = pmts.reduce((s, p) => s + Number(p.amountCents), 0);
+  const totalExpected  = members.length * Number(period.amountDueCents);
   const stats = { paidCount, totalMembers: members.length, totalCollected, totalExpected };
   _statsCache = { key, stats };
   return stats;
 }
 
 function allocTotal(rules) {
-  return rules.reduce((s, r) => s + Number(r.percent || 0), 0);
+  return rules.reduce((s, r) => s + Number(r.basisPoints || 0), 0) / 100;
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────
@@ -612,7 +591,7 @@ function populatePeriodSelect() {
     selectedPeriodId = sorted[0].id;
   }
   sel.innerHTML = sorted.map(p =>
-    `<option value="${esc(p.id)}"${p.id === selectedPeriodId ? " selected" : ""}>${esc(p.label)}${p.status === "locked" ? " 🔒" : ""}</option>`
+    `<option value="${esc(p.id)}"${p.id === selectedPeriodId ? " selected" : ""}>${esc(p.label)}${p.status !== "open" ? " 🔒" : ""}</option>`
   ).join("");
 }
 
@@ -683,25 +662,28 @@ function renderMain() {
 
   const stats  = getPeriodStats(period);
   const pct    = stats.totalExpected > 0 ? Math.min(100, Math.round(100 * stats.totalCollected / stats.totalExpected)) : 0;
-  const locked = period.status === "locked";
+  const locked = period.status !== "open";
+  const closing = period.status === "closing";
 
   const visibleMembers = amIBoard() ? members : members.filter(m => m.id === ME?.id);
 
-  const summaryActions = amIBoard() && !locked
+  const summaryActions = amIBoard() && period.status === "open"
     ? `<button class="btn btn-sm" style="margin-left:auto" onclick="openEditPeriodModal()">Edit</button>
        <button class="btn btn-sm" onclick="closePeriod()">Close Period</button>
        <button class="btn btn-sm btn-danger" onclick="deletePeriod()">Delete</button>`
-    : "";
+    : amIBoard() && closing
+      ? `<button class="btn btn-sm" style="margin-left:auto" onclick="closePeriod()">Resume Close</button>`
+      : "";
 
   el.innerHTML = `
     <div class="summary-card ${locked ? "locked" : "open"}">
       <div class="summary-header">
         <h2>${esc(period.label)}</h2>
-        <span class="badge ${locked ? "badge-locked" : "badge-open"}">${locked ? "Closed" : "Open"}</span>
+        <span class="badge ${locked ? "badge-locked" : "badge-open"}">${closing ? "Closing" : locked ? "Closed" : "Open"}</span>
         ${summaryActions}
       </div>
       <div class="summary-stats">
-        <div class="stat"><div class="stat-label">Amount Due</div><div class="stat-value">${fmtDollars(period.amountDue)}</div></div>
+        <div class="stat"><div class="stat-label">Amount Due</div><div class="stat-value">${fmtDollars(period.amountDueCents)}</div></div>
         <div class="stat"><div class="stat-label">Collected</div><div class="stat-value" id="stat-collected">${fmtDollars(stats.totalCollected)}</div></div>
         <div class="stat"><div class="stat-label">Expected</div><div class="stat-value">${fmtDollars(stats.totalExpected)}</div></div>
         <div class="stat"><div class="stat-label">Paid Members</div><div class="stat-value" id="stat-paid-count">${stats.paidCount} / ${stats.totalMembers}</div></div>
@@ -721,7 +703,7 @@ function buildMemberRow(m, period, locked) {
   const bc = { paid: "badge-paid", partial: "badge-partial", overdue: "badge-overdue", pending: "badge-pending" }[status] ?? "badge-pending";
   const pmts = getMemberPayments(period.id, m.id);
   const history = pmts.map(p =>
-    `<div>${fmtDate(p.date)}: ${fmtDollars(p.amount)}${amIBoard() && !locked
+    `<div>${fmtDate(p.date)}: ${fmtDollars(p.amountCents)}${p.postingStatus !== "posted" ? ` <span class="badge badge-pending">sync pending</span>` : ""}${amIBoard() && !locked
       ? ` <button class="btn btn-sm btn-danger" style="padding:1px 6px;font-size:0.7rem" onclick="deletePayment('${esc(p.id)}')">&#x2715;</button>`
       : ""}</div>`
   ).join("");
@@ -729,7 +711,7 @@ function buildMemberRow(m, period, locked) {
   const ini = initial(m.name);
   return `<tr id="row-${esc(m.id)}">
     <td><span class="member-avatar" style="background:${color}">${esc(ini)}</span>${esc(m.name)}</td>
-    <td class="amount-col">${fmtDollars(period.amountDue)}</td>
+    <td class="amount-col">${fmtDollars(period.amountDueCents)}</td>
     <td class="amount-col">${fmtDollars(totalPaid)}</td>
     <td><span class="badge ${bc}">${status}</span></td>
     <td class="payment-detail">${history || "<span style='color:var(--hub-text-muted,#9ca3af)'>none</span>"}</td>
@@ -766,7 +748,7 @@ function buildAllocSection(period) {
   const total = allocTotal(rules);
   const rows = rules.map(r => {
     const fund = fundsList.find(f => f.id === r.fundId);
-    return `<div class="alloc-row"><div class="alloc-fund">${esc(fund?.name ?? r.fundId)}</div><div class="alloc-pct">${r.percent}%</div></div>`;
+    return `<div class="alloc-row"><div class="alloc-fund">${esc(fund?.name ?? r.fundId)}</div><div class="alloc-pct">${r.basisPoints / 100}%</div></div>`;
   }).join("");
   return `<div class="section">
     <div class="section-header"><h3>Allocation Rules</h3>${editBtn}</div>
@@ -780,7 +762,7 @@ function buildAssessmentsSection() {
   if (!list.length) return "";
   const rows = list.map(a => `<tr>
     <td>${esc(a.label)} <span class="badge badge-special">assessment</span></td>
-    <td class="amount-col">${fmtDollars(a.amount)}</td>
+    <td class="amount-col">${fmtDollars(a.amountCents)}</td>
     <td>${fmtDate(a.dueDate)}</td>
     <td>${a.memberIds?.includes("all") ? "All members" : `${a.memberIds?.length ?? 0} members`}</td>
     <td class="actions-col"><button class="btn btn-sm btn-danger" onclick="deleteAssessment('${esc(a.id)}')">Delete</button></td>
@@ -851,22 +833,22 @@ window.openNewPeriodModal = function() {
 
 window.submitNewPeriod = async function() {
   const label  = document.getElementById("f-label").value.trim();
-  const amount = parseFloat(document.getElementById("f-amount").value);
+  const amountCents = toCents(document.getElementById("f-amount").value);
   const due    = document.getElementById("f-due").value;
   if (!label)               { document.getElementById("f-label").focus(); return; }
-  if (isNaN(amount) || amount < 0) { document.getElementById("f-amount").focus(); return; }
+  if (!Number.isInteger(amountCents) || amountCents < 0) { document.getElementById("f-amount").focus(); return; }
 
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Creating…"; }
   try {
     const id = crypto.randomUUID();
-    const createdAt = new Date().toISOString();
-    // created_by is forced to the caller by the row policy; pass it as a bound (?).
-    await db(
-      "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due, status, allocation_rules, visibility, created_by, created_at) VALUES (?,?,?,?,'open','[]','everyone',?,?)",
-      [id, label, due || null, amount, "", createdAt],
-    );
-    data.periods.push({ id, label, dueDate: due || null, amountDue: amount, status: "open", allocationRules: [], reconciliation: null, createdAt });
+    const result = await finance("periods", {
+      action: "create", id, label, due_date: due || null, amount_due_cents: amountCents,
+    });
+    data.periods.push({
+      id, label, dueDate: due || null, amountDueCents: amountCents,
+      status: "open", allocationRules: [], reconciliation: null, createdAt: result.created_at,
+    });
     selectedPeriodId = id;
     closeModal();
     render();
@@ -888,7 +870,7 @@ window.openEditPeriodModal = function() {
     <div class="form-row">
       <div class="form-group">
         <label>Amount Due per Member ($)</label>
-        <input id="f-amount" type="number" min="0" step="0.01" value="${period.amountDue}">
+        <input id="f-amount" type="number" min="0" step="0.01" value="${centsInput(period.amountDueCents)}">
       </div>
       <div class="form-group">
         <label>Due Date</label>
@@ -904,7 +886,7 @@ window.openEditPeriodModal = function() {
 
 window.submitEditPeriod = async function() {
   const label  = document.getElementById("f-label").value.trim();
-  const amount = parseFloat(document.getElementById("f-amount").value);
+  const amountCents = toCents(document.getElementById("f-amount").value);
   const due    = document.getElementById("f-due").value;
   if (!label) { document.getElementById("f-label").focus(); return; }
 
@@ -913,13 +895,13 @@ window.submitEditPeriod = async function() {
   try {
     const period = data.periods.find(p => p.id === selectedPeriodId);
     if (!period) return;
-    const newAmount = isNaN(amount) ? period.amountDue : amount;
-    await db(
-      "UPDATE app_dues_contributions__periods SET label=?, amount_due=?, due_date=? WHERE id=?",
-      [label, newAmount, due || null, period.id],
-    );
+    const newAmountCents = Number.isInteger(amountCents) ? amountCents : period.amountDueCents;
+    await finance("periods", {
+      action: "update", id: period.id, label,
+      amount_due_cents: newAmountCents, due_date: due || null,
+    });
     period.label = label;
-    period.amountDue = newAmount;
+    period.amountDueCents = newAmountCents;
     period.dueDate = due || null;
     closeModal();
     render();
@@ -936,19 +918,17 @@ window.deletePeriod = async function() {
   const confirmed = await hubConfirm({
     message: `Delete period "${period.label}"?`,
     description: cnt > 0
-      ? `This will permanently delete ${cnt} payment record(s). Reserve fund entries already posted will NOT be reversed.`
+      ? `This period has ${cnt} payment record(s). Reverse and delete those payments first.`
       : "This will permanently delete the period.",
     confirmLabel: "Delete Period",
     destructive: true,
   });
   if (!confirmed) return;
+  if (cnt > 0) return;
   const pid = selectedPeriodId;
   try {
-    // Delete child payments first, then the period.
-    await db("DELETE FROM app_dues_contributions__payments WHERE period_id=?", [pid]);
-    await db("DELETE FROM app_dues_contributions__periods WHERE id=?", [pid]);
+    await finance("periods", { action: "delete", id: pid });
     data.periods  = data.periods.filter(p => p.id !== pid);
-    data.payments = data.payments.filter(p => p.periodId !== pid);
     rebuildIndexes();
     selectedPeriodId = data.periods[0]?.id ?? null;
     render();
@@ -969,29 +949,11 @@ window.closePeriod = async function() {
   });
   if (!confirmed) return;
 
-  const closedAt = new Date().toISOString();
-  const stats = getPeriodStats(period);
-  const reconciliation = {
-    totalExpected:  stats.totalExpected,
-    totalCollected: stats.totalCollected,
-    overdueMembers: members
-      .filter(m => getMemberStatus(m.id, period).status !== "paid")
-      .map(m => {
-        const { totalPaid } = getMemberStatus(m.id, period);
-        return { id: m.id, name: m.name, totalPaid, balance: Number(period.amountDue) - totalPaid };
-      }),
-    closedAt,
-  };
-
   try {
-    await db(
-      "UPDATE app_dues_contributions__periods SET status='locked', closed_at=?, closed_by=?, reconciliation=? WHERE id=?",
-      [closedAt, ME?.name ?? "Board", JSON.stringify(reconciliation), period.id],
-    );
+    const result = await finance("periods", { action: "close", id: period.id });
     period.status = "locked";
-    period.closedAt = closedAt;
-    period.closedBy = ME?.name ?? "Board";
-    period.reconciliation = reconciliation;
+    period.closedAt = result.closed_at;
+    period.reconciliation = result.reconciliation;
     render();
     openReconModal(period);
   } catch (e) { alert(e.message ?? "Close failed"); }
@@ -1001,16 +963,16 @@ function openReconModal(period) {
   const r = period.reconciliation;
   const overdueRows = r.overdueMembers.length
     ? r.overdueMembers.map(m =>
-        `<div class="recon-row"><span class="recon-label">${esc(m.name)}</span><span class="recon-value" style="color:#dc2626">${fmtDollars(m.balance)} outstanding</span></div>`
+        `<div class="recon-row"><span class="recon-label">${esc(m.name)}</span><span class="recon-value" style="color:#dc2626">${fmtDollars(m.balanceCents)} outstanding</span></div>`
       ).join("")
     : `<div class="recon-row"><span class="recon-label" style="color:#16a34a">All members paid in full</span></div>`;
-  const gap = r.totalExpected - r.totalCollected;
+  const gap = r.totalExpectedCents - r.totalCollectedCents;
   openModal(`
     <h2>Period Closed &#x2014; Reconciliation</h2>
     <div class="recon-report">
       <h4>${esc(period.label)}</h4>
-      <div class="recon-row"><span class="recon-label">Total Expected</span><span class="recon-value">${fmtDollars(r.totalExpected)}</span></div>
-      <div class="recon-row"><span class="recon-label">Total Collected</span><span class="recon-value">${fmtDollars(r.totalCollected)}</span></div>
+      <div class="recon-row"><span class="recon-label">Total Expected</span><span class="recon-value">${fmtDollars(r.totalExpectedCents)}</span></div>
+      <div class="recon-row"><span class="recon-label">Total Collected</span><span class="recon-value">${fmtDollars(r.totalCollectedCents)}</span></div>
       <div class="recon-row"><span class="recon-label">Outstanding</span><span class="recon-value" style="color:${gap > 0 ? "#dc2626" : "#16a34a"}">${fmtDollars(gap)}</span></div>
     </div>
     <div style="margin:12px 0 6px;font-size:0.82rem;font-weight:600;color:var(--hub-text-muted,#6b7280)">Outstanding Members</div>
@@ -1025,17 +987,17 @@ window.openRecordPaymentModal = function(memberId) {
   if (!period) return;
   const member = membersMap.get(memberId);
   const { totalPaid } = getMemberStatus(memberId, period);
-  const remaining = Math.max(0, Number(period.amountDue) - totalPaid);
+  const remaining = Math.max(0, Number(period.amountDueCents) - totalPaid);
   const noFunds = !period.allocationRules?.length;
   openModal(`
     <h2>Record Payment &#x2014; ${esc(member?.name ?? memberId)}</h2>
     <div style="margin-bottom:14px;font-size:0.82rem;color:var(--hub-text-muted,#6b7280)">
-      Period: ${esc(period.label)} &nbsp;&#xB7;&nbsp; Due: ${fmtDollars(period.amountDue)} &nbsp;&#xB7;&nbsp; Paid so far: ${fmtDollars(totalPaid)}
+      Period: ${esc(period.label)} &nbsp;&#xB7;&nbsp; Due: ${fmtDollars(period.amountDueCents)} &nbsp;&#xB7;&nbsp; Paid so far: ${fmtDollars(totalPaid)}
     </div>
     <div class="form-row">
       <div class="form-group">
         <label>Amount ($)</label>
-        <input id="f-pay-amount" type="number" min="0.01" step="0.01" value="${remaining}" placeholder="0.00">
+        <input id="f-pay-amount" type="number" min="0.01" step="0.01" value="${centsInput(remaining)}" placeholder="0.00">
       </div>
       <div class="form-group">
         <label>Date</label>
@@ -1054,9 +1016,9 @@ window.openRecordPaymentModal = function(memberId) {
 };
 
 window.submitPayment = async function(memberId) {
-  const amount = parseFloat(document.getElementById("f-pay-amount").value);
+  const amountCents = toCents(document.getElementById("f-pay-amount").value);
   const date   = document.getElementById("f-pay-date").value;
-  if (isNaN(amount) || amount <= 0) { document.getElementById("f-pay-amount").focus(); return; }
+  if (!Number.isInteger(amountCents) || amountCents <= 0) { document.getElementById("f-pay-amount").focus(); return; }
   if (!date) { document.getElementById("f-pay-date").focus(); return; }
 
   const btn = modalEl?.querySelector(".btn-primary");
@@ -1068,20 +1030,19 @@ window.submitPayment = async function(memberId) {
   try {
     const payment = {
       id: crypto.randomUUID(), memberId, periodId: selectedPeriodId,
-      amount, date, recordedBy: ME?.name ?? "Board", recordedAt: new Date().toISOString(),
+      amountCents, date, postingStatus: "pending", recordedAt: new Date().toISOString(),
     };
-    // member_id records WHO paid (data only); created_by (forced by policy to the
-    // board recorder) is the owner column, so a payer can never write their own row.
-    await db(
-      "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount, date, recorded_by, recorded_at, visibility, created_by) VALUES (?,?,?,?,?,?,?,'everyone',?)",
-      [payment.id, payment.periodId, memberId, amount, date, payment.recordedBy, payment.recordedAt, ""],
-    );
+    const result = await finance("payments", {
+      action: "create", id: payment.id, period_id: payment.periodId,
+      member_id: memberId, amount_cents: amountCents, date,
+    });
+    payment.postingStatus = result.posting_status;
+    payment.recordedAt = result.recorded_at;
     data.payments.push(payment);
     addPaymentToIndex(payment);
     closeModal();
     patchAfterPayment(memberId, period);
-    // Post allocations to the reserve fund (cross-write is gated to the board group).
-    postAllocationEntries(payment, period);
+    if (result.warning) alert(result.warning);
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Record Payment"; }
     alert(e.message ?? "Record failed");
@@ -1096,16 +1057,15 @@ window.deletePayment = async function(paymentId) {
   const period = data.periods.find(p => p.id === periodId);
   const confirmed = await hubConfirm({
     message: "Delete this payment?",
-    description: `${fmtDollars(payment.amount)} from ${member?.name ?? "member"} on ${fmtDate(payment.date)}. Reversal entries will be posted to reserve funds.`,
+    description: `${fmtDollars(payment.amountCents)} from ${member?.name ?? "member"} on ${fmtDate(payment.date)}. Idempotent reversal entries will be posted before deletion.`,
     confirmLabel: "Delete & Reverse",
     destructive: true,
   });
   if (!confirmed) return;
   try {
-    await db("DELETE FROM app_dues_contributions__payments WHERE id=?", [paymentId]);
+    await finance("payments", { action: "delete", id: paymentId });
     data.payments = data.payments.filter(p => p.id !== paymentId);
     removePaymentFromIndex(paymentId, periodId, memberId);
-    if (period) postAllocationEntries(payment, period, true, paymentId);
     if (period && period.id === selectedPeriodId) {
       patchAfterPayment(memberId, period);
     } else {
@@ -1113,6 +1073,26 @@ window.deletePayment = async function(paymentId) {
     }
   } catch (e) { alert(e.message ?? "Delete failed"); }
 };
+
+async function retryPendingPayments() {
+  if (!amIBoard()) return;
+  let removed = false;
+  for (const payment of [...data.payments].filter(p => p.postingStatus !== "posted")) {
+    try {
+      if (payment.postingStatus === "deleting") {
+        await finance("payments", { action: "delete", id: payment.id });
+        data.payments = data.payments.filter(candidate => candidate.id !== payment.id);
+        removed = true;
+      } else {
+        await finance("payments", { action: "retry", id: payment.id });
+        payment.postingStatus = "posted";
+      }
+    } catch (e) {
+      console.warn(`Reserve posting retry failed for payment ${payment.id}`, e);
+    }
+  }
+  if (removed) rebuildIndexes();
+}
 
 // ── Allocation rules ───────────────────────────────────────────────────────
 window.openAllocRulesModal = function(periodId) {
@@ -1140,7 +1120,7 @@ function renderAllocEditorModal() {
       <select onchange="updateAllocRule(${i},'fundId',this.value)">
         ${fundsList.map(f => `<option value="${esc(f.id)}"${f.id === r.fundId ? " selected" : ""}>${esc(f.name)}</option>`).join("")}
       </select>
-      <input type="number" min="0" max="100" step="1" value="${r.percent}" onchange="updateAllocRule(${i},'percent',this.value)" placeholder="%">
+      <input type="number" min="0" max="100" step="0.01" value="${r.basisPoints / 100}" onchange="updateAllocRule(${i},'basisPoints',this.value)" placeholder="%">
       <span>%</span>
       <button class="btn btn-sm btn-danger" onclick="removeAllocRule(${i})">&#x2715;</button>
     </div>`).join("");
@@ -1162,7 +1142,7 @@ function renderAllocEditorModal() {
 
 window.addAllocRule = function() {
   window._workingRules = window._workingRules ?? [];
-  window._workingRules.push({ fundId: fundsList[0].id, percent: 0 });
+  window._workingRules.push({ fundId: fundsList[0].id, basisPoints: 0 });
   renderAllocEditorModal();
 };
 
@@ -1173,7 +1153,7 @@ window.removeAllocRule = function(idx) {
 
 window.updateAllocRule = function(idx, field, value) {
   if (!window._workingRules?.[idx]) return;
-  window._workingRules[idx][field] = field === "percent" ? Number(value) : value;
+  window._workingRules[idx][field] = field === "basisPoints" ? Math.round(Number(value) * 100) : value;
   const total = allocTotal(window._workingRules);
   const el = document.getElementById("alloc-total");
   if (el) {
@@ -1189,9 +1169,13 @@ window.saveAllocRules = async function() {
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   try {
-    const rules = (window._workingRules ?? []).filter(r => r.fundId && r.percent > 0);
-    await db("UPDATE app_dues_contributions__periods SET allocation_rules=? WHERE id=?", [JSON.stringify(rules), period.id]);
-    period.allocationRules = rules;
+    const rules = (window._workingRules ?? []).filter(r => r.fundId && r.basisPoints > 0);
+    if (rules.length && allocTotal(rules) !== 100) throw new Error("Allocation rules must total exactly 100%");
+    const result = await finance("periods", {
+      action: "set_allocations", id: period.id,
+      allocation_rules: rules.map(r => ({ fund_id: r.fundId, basis_points: r.basisPoints })),
+    });
+    period.allocationRules = result.allocation_rules;
     window._workingRules = null;
     window._allocPeriodId = null;
     closeModal();
@@ -1210,7 +1194,7 @@ window.openAssessmentsModal = function() {
 function renderAssessmentsModal() {
   const rows = data.assessments.map(a => `<tr>
     <td>${esc(a.label)}</td>
-    <td class="amount-col">${fmtDollars(a.amount)}</td>
+    <td class="amount-col">${fmtDollars(a.amountCents)}</td>
     <td>${fmtDate(a.dueDate)}</td>
     <td>${a.memberIds?.includes("all") ? "All" : `${a.memberIds?.length ?? 0} members`}</td>
     <td class="actions-col"><button class="btn btn-sm btn-danger" onclick="deleteAssessmentInModal('${esc(a.id)}')">Delete</button></td>
@@ -1254,10 +1238,10 @@ window.openNewAssessmentModal = function() {
 
 window.submitNewAssessment = async function() {
   const label  = document.getElementById("f-ass-label").value.trim();
-  const amount = parseFloat(document.getElementById("f-ass-amount").value);
+  const amountCents = toCents(document.getElementById("f-ass-amount").value);
   const due    = document.getElementById("f-ass-due").value;
   if (!label)                { document.getElementById("f-ass-label").focus(); return; }
-  if (isNaN(amount) || amount <= 0) { document.getElementById("f-ass-amount").focus(); return; }
+  if (!Number.isInteger(amountCents) || amountCents <= 0) { document.getElementById("f-ass-amount").focus(); return; }
 
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Creating…"; }
@@ -1265,10 +1249,10 @@ window.submitNewAssessment = async function() {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     await db(
-      "INSERT INTO app_dues_contributions__assessments (id, label, amount, due_date, member_ids, visibility, created_by, created_at) VALUES (?,?,?,?,'[\"all\"]','everyone',?,?)",
-      [id, label, amount, due || null, "", createdAt],
+      "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?,?,?,?,'[\"all\"]','everyone',?,?)",
+      [id, label, amountCents, due || null, "", createdAt],
     );
-    data.assessments.push({ id, label, amount, dueDate: due || null, memberIds: ["all"], createdAt });
+    data.assessments.push({ id, label, amountCents, dueDate: due || null, memberIds: ["all"], createdAt });
     closeModal();
     render();
   } catch (e) {
@@ -1321,6 +1305,8 @@ function handleDeepLink() {
   }
   render();
   handleDeepLink();
+  await retryPendingPayments();
+  render();
 })();
 </script>
 </body>
