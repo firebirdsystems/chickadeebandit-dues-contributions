@@ -319,7 +319,7 @@
 </div>
 
 <script type="module">
-import { esc, hubConfirm, memberColor, initial } from "/hub-sdk.js";
+import { hubAlert, esc, hubConfirm, memberColor, initial } from "/hub-sdk.js";
 
 const CONTEXT         = window.__CONTEXT_URL     ?? "";
 const DB              = window.__DB_URL           ?? "";
@@ -645,7 +645,7 @@ window.saveBoardConfig = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save"; }
-    alert(e.message ?? "Save failed");
+    hubAlert(e.message ?? "Save failed");
   }
 };
 
@@ -854,7 +854,7 @@ window.submitNewPeriod = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Create Period"; }
-    alert(e.message ?? "Create failed");
+    hubAlert(e.message ?? "Create failed");
   }
 };
 
@@ -907,7 +907,7 @@ window.submitEditPeriod = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save"; }
-    alert(e.message ?? "Save failed");
+    hubAlert(e.message ?? "Save failed");
   }
 };
 
@@ -932,7 +932,7 @@ window.deletePeriod = async function() {
     rebuildIndexes();
     selectedPeriodId = data.periods[0]?.id ?? null;
     render();
-  } catch (e) { alert(e.message ?? "Delete failed"); }
+  } catch (e) { hubAlert(e.message ?? "Delete failed"); }
 };
 
 window.closePeriod = async function() {
@@ -956,7 +956,7 @@ window.closePeriod = async function() {
     period.reconciliation = result.reconciliation;
     render();
     openReconModal(period);
-  } catch (e) { alert(e.message ?? "Close failed"); }
+  } catch (e) { hubAlert(e.message ?? "Close failed"); }
 };
 
 function openReconModal(period) {
@@ -1042,10 +1042,10 @@ window.submitPayment = async function(memberId) {
     addPaymentToIndex(payment);
     closeModal();
     patchAfterPayment(memberId, period);
-    if (result.warning) alert(result.warning);
+    if (result.warning) hubAlert(result.warning);
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Record Payment"; }
-    alert(e.message ?? "Record failed");
+    hubAlert(e.message ?? "Record failed");
   }
 };
 
@@ -1071,7 +1071,7 @@ window.deletePayment = async function(paymentId) {
     } else {
       render();
     }
-  } catch (e) { alert(e.message ?? "Delete failed"); }
+  } catch (e) { hubAlert(e.message ?? "Delete failed"); }
 };
 
 async function retryPendingPayments() {
@@ -1182,7 +1182,7 @@ window.saveAllocRules = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save Rules"; }
-    alert(e.message ?? "Save failed");
+    hubAlert(e.message ?? "Save failed");
   }
 };
 
@@ -1257,7 +1257,7 @@ window.submitNewAssessment = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Create"; }
-    alert(e.message ?? "Create failed");
+    hubAlert(e.message ?? "Create failed");
   }
 };
 
@@ -1270,7 +1270,7 @@ window.deleteAssessment = async function(id) {
     await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
     data.assessments = data.assessments.filter(x => x.id !== id);
     render();
-  } catch (e) { alert(e.message ?? "Delete failed"); }
+  } catch (e) { hubAlert(e.message ?? "Delete failed"); }
 };
 
 window.deleteAssessmentInModal = async function(id) {
@@ -1282,7 +1282,7 @@ window.deleteAssessmentInModal = async function(id) {
     await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
     data.assessments = data.assessments.filter(x => x.id !== id);
     renderAssessmentsModal();
-  } catch (e) { alert(e.message ?? "Delete failed"); }
+  } catch (e) { hubAlert(e.message ?? "Delete failed"); }
 };
 
 // ── Deep link ──────────────────────────────────────────────────────────────
