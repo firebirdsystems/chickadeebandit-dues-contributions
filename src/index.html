@@ -320,6 +320,7 @@
 
 <script type="module">
 import { hubAlert, esc, hubConfirm, memberColor, initial } from "/hub-sdk.js";
+import { canManageDues as _canManageDues } from "./logic.js";
 
 const CONTEXT         = window.__CONTEXT_URL     ?? "";
 const DB              = window.__DB_URL           ?? "";
@@ -345,9 +346,7 @@ let boardGroupId = "";     // configured Board group (gates writes server-side)
 // row policy). Configuring the group is separate and admin-only (openBoardConfig).
 function amIBoard() {
   if (DEMO) return true;
-  if (!boardGroupId || !ME) return false;
-  const g = groups.find(g => g.id === boardGroupId);
-  return !!g && g.memberIds.includes(ME.id);
+  return _canManageDues(ME, groups, boardGroupId);
 }
 
 // ── DB helper ────────────────────────────────────────────────────────────────
