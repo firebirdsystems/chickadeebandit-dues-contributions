@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS app_dues_contributions__periods (
   amount_due_cents INTEGER NOT NULL DEFAULT 0 CHECK (amount_due_cents >= 0),
   status           TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closing', 'locked')),
   allocation_rules TEXT NOT NULL DEFAULT '[]',
+  skipped_member_ids TEXT NOT NULL DEFAULT '[]',
   reconciliation   TEXT,
   closing_token_id TEXT,
   closing_started_at TEXT,

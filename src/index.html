@@ -160,6 +160,7 @@
     tr:hover td { background: var(--hub-bg, #f9fafb); }
     .amount-col { text-align: right; font-variant-numeric: tabular-nums; }
     .actions-col { text-align: right; white-space: nowrap; }
+    .actions-col .btn + .btn { margin-left: 6px; }
 
     /* ── Empty state ── */
     .empty { text-align: center; padding: 36px 20px; color: var(--hub-text-muted, #6b7280); font-size: 0.85rem; }
@@ -461,6 +462,7 @@ async function loadData() {
     id: r.id, label: r.label, dueDate: r.due_date ?? null, amountDueCents: r.amount_due_cents ?? 0,
     status: r.status ?? "open",
     allocationRules: safeParse(r.allocation_rules, []),
+    skippedMemberIds: safeParse(r.skipped_member_ids, []),
     reconciliation: safeParse(r.reconciliation, null),
     closedAt: r.closed_at ?? null, closedById: r.closed_by_id ?? null, createdAt: r.created_at,
   }));
@@ -503,10 +505,11 @@ async function loadFundsList() {
 // ── Demo data ──────────────────────────────────────────────────────────────
 function getDemoMembers() {
   return [
-    { id: "m1", name: "Alice Johnson", role: "board", isAdmin: true },
-    { id: "m2", name: "Bob Smith",     role: "member" },
-    { id: "m3", name: "Carol Davis",   role: "member" },
-    { id: "m4", name: "David Lee",     role: "member" },
+    { id: "m1", name: "Alice Johnson", role: "adult", email: "alice@example.com", isAdmin: true },
+    { id: "m2", name: "Bob Smith",     role: "adult", email: "bob@example.com" },
+    { id: "m3", name: "Carol Davis",   role: "adult", email: "carol@example.com" },
+    { id: "m4", name: "David Lee",     role: "adult" },
+    { id: "m5", name: "Ella Lee",      role: "child", email: "ella@example.com" },
   ];
 }
 function getDemoFunds() {
@@ -521,6 +524,7 @@ function getDemoData() {
     periods: [{
       id: p1, label: "May 2026", dueDate: "2026-05-15", amountDueCents: 20000, status: "open",
       allocationRules: [{ fundId: "f1", basisPoints: 6000 }, { fundId: "f2", basisPoints: 4000 }],
+      skippedMemberIds: [],
       createdAt: "2026-05-01T00:00:00Z",
     }],
     payments: [
@@ -543,9 +547,31 @@ function getMemberPayments(periodId, memberId) {
   return paymentsByPeriodMember.get(periodId)?.get(memberId) ?? [];
 }
 
+function isDuesEligibleMember(member) {
+  return member?.role !== "child" && typeof member?.email === "string" && member.email.trim().length > 0;
+}
+
+function getDuesMembers() {
+  return members.filter(isDuesEligibleMember);
+}
+
+function getSkippedMemberIds(period) {
+  return Array.isArray(period?.skippedMemberIds) ? period.skippedMemberIds : [];
+}
+
+function isMemberSkipped(period, memberId) {
+  return getSkippedMemberIds(period).includes(memberId);
+}
+
+function getBillableMembers(period) {
+  const skipped = new Set(getSkippedMemberIds(period));
+  return getDuesMembers().filter(m => !skipped.has(m.id));
+}
+
 function getMemberStatus(memberId, period) {
   const pmts = getMemberPayments(period.id, memberId);
   const totalPaid = pmts.reduce((s, p) => s + Number(p.amountCents), 0);
+  if (isMemberSkipped(period, memberId)) return { status: "skipped", totalPaid };
   const due = Number(period.amountDueCents);
   const late = period.dueDate && todayStr() > period.dueDate;
   if (totalPaid >= due) return { status: "paid", totalPaid };
@@ -557,12 +583,14 @@ let _statsCache = { key: null, stats: null };
 
 function getPeriodStats(period) {
   const pmts = getPeriodPayments(period.id);
-  const key = `${period.id}:${pmts.length}`;
+  const billableMembers = getBillableMembers(period);
+  const skippedKey = getSkippedMemberIds(period).join(",");
+  const key = `${period.id}:${pmts.length}:${members.length}:${skippedKey}`;
   if (_statsCache.key === key) return _statsCache.stats;
-  const paidCount      = members.filter(m => getMemberStatus(m.id, period).status === "paid").length;
+  const paidCount      = billableMembers.filter(m => getMemberStatus(m.id, period).status === "paid").length;
   const totalCollected = pmts.reduce((s, p) => s + Number(p.amountCents), 0);
-  const totalExpected  = members.length * Number(period.amountDueCents);
-  const stats = { paidCount, totalMembers: members.length, totalCollected, totalExpected };
+  const totalExpected  = billableMembers.length * Number(period.amountDueCents);
+  const stats = { paidCount, totalMembers: billableMembers.length, totalCollected, totalExpected };
   _statsCache = { key, stats };
   return stats;
 }
@@ -664,7 +692,10 @@ function renderMain() {
   const locked = period.status !== "open";
   const closing = period.status === "closing";
 
-  const visibleMembers = amIBoard() ? members : members.filter(m => m.id === ME?.id);
+  const duesMembers = getDuesMembers();
+  const visibleMembers = amIBoard()
+    ? duesMembers
+    : duesMembers.filter(m => m.id === ME?.id && !isMemberSkipped(period, m.id));
 
   const summaryActions = amIBoard() && period.status === "open"
     ? `<button class="btn btn-sm" style="margin-left:auto" onclick="openEditPeriodModal()">Edit</button>
@@ -699,7 +730,8 @@ function renderMain() {
 
 function buildMemberRow(m, period, locked) {
   const { status, totalPaid } = getMemberStatus(m.id, period);
-  const bc = { paid: "badge-paid", partial: "badge-partial", overdue: "badge-overdue", pending: "badge-pending" }[status] ?? "badge-pending";
+  const skipped = status === "skipped";
+  const bc = { paid: "badge-paid", partial: "badge-partial", overdue: "badge-overdue", pending: "badge-pending", skipped: "badge-pending" }[status] ?? "badge-pending";
   const pmts = getMemberPayments(period.id, m.id);
   const history = pmts.map(p =>
     `<div>${fmtDate(p.date)}: ${fmtDollars(p.amountCents)}${p.postingStatus !== "posted" ? ` <span class="badge badge-pending">sync pending</span>` : ""}${amIBoard() && !locked
@@ -710,16 +742,16 @@ function buildMemberRow(m, period, locked) {
   const ini = initial(m.name);
   return `<tr id="row-${esc(m.id)}">
     <td><span class="member-avatar" style="background:${color}">${esc(ini)}</span>${esc(m.name)}</td>
-    <td class="amount-col">${fmtDollars(period.amountDueCents)}</td>
+    <td class="amount-col">${skipped ? "—" : fmtDollars(period.amountDueCents)}</td>
     <td class="amount-col">${fmtDollars(totalPaid)}</td>
     <td><span class="badge ${bc}">${status}</span></td>
     <td class="payment-detail">${history || "<span style='color:var(--hub-text-muted,#9ca3af)'>none</span>"}</td>
-    ${amIBoard() ? `<td class="actions-col">${!locked ? `<button class="btn btn-sm btn-primary" onclick="openRecordPaymentModal('${esc(m.id)}')">Record Payment</button>` : ""}</td>` : ""}
+    ${amIBoard() ? `<td class="actions-col">${!locked ? `${!skipped ? `<button class="btn btn-sm btn-primary" onclick="openRecordPaymentModal('${esc(m.id)}')">Record Payment</button>` : ""}<button class="btn btn-sm" onclick="toggleMemberSkipped('${esc(m.id)}')">${skipped ? "Collect" : "Skip"}</button>` : ""}</td>` : ""}
   </tr>`;
 }
 
 function buildMemberRoster(period, visibleMembers, locked) {
-  if (!visibleMembers.length) return "";
+  if (!visibleMembers.length) return `<div class="section"><div class="empty">No dues-eligible members have email addresses.</div></div>`;
   const rows = visibleMembers.map(m => buildMemberRow(m, period, locked)).join("");
   return `<div class="section">
     <div class="section-header"><h3>Member Payments</h3></div>
@@ -846,7 +878,7 @@ window.submitNewPeriod = async function() {
     });
     data.periods.push({
       id, label, dueDate: due || null, amountDueCents: amountCents,
-      status: "open", allocationRules: [], reconciliation: null, createdAt: result.created_at,
+      status: "open", allocationRules: [], skippedMemberIds: [], reconciliation: null, createdAt: result.created_at,
     });
     selectedPeriodId = id;
     closeModal();
@@ -937,7 +969,7 @@ window.deletePeriod = async function() {
 window.closePeriod = async function() {
   const period = data.periods.find(p => p.id === selectedPeriodId);
   if (!period) return;
-  const overdueCount = members.filter(m => {
+  const overdueCount = getBillableMembers(period).filter(m => {
     const { status } = getMemberStatus(m.id, period);
     return status !== "paid";
   }).length;
@@ -956,6 +988,25 @@ window.closePeriod = async function() {
     render();
     openReconModal(period);
   } catch (e) { hubAlert(e.message ?? "Close failed"); }
+};
+
+window.toggleMemberSkipped = async function(memberId) {
+  const period = data.periods.find(p => p.id === selectedPeriodId);
+  if (!period || period.status !== "open") return;
+  const skipped = new Set(getSkippedMemberIds(period));
+  if (skipped.has(memberId)) skipped.delete(memberId);
+  else skipped.add(memberId);
+  const skippedMemberIds = [...skipped].filter(id => membersMap.has(id));
+  try {
+    const result = await finance("periods", {
+      action: "set_skipped_members", id: period.id, member_ids: skippedMemberIds,
+    });
+    period.skippedMemberIds = result.skipped_member_ids ?? skippedMemberIds;
+    _statsCache = { key: null, stats: null };
+    render();
+  } catch (e) {
+    hubAlert(e.message ?? "Update failed");
+  }
 };
 
 function openReconModal(period) {

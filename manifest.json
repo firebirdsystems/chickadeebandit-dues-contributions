@@ -17,7 +17,7 @@
     "requires_approval": true
   },
   "storage": "db",
-  "db_plaintext_columns": ["posting_status", "allocation_rules", "date"],
+  "db_plaintext_columns": ["posting_status", "allocation_rules", "skipped_member_ids", "date"],
   "icon": "💳",
   "nav": { "label": "Dues" },
   "row_policies": {
@@ -43,6 +43,10 @@
     "periods_table": "periods",
     "payments_table": "payments",
     "target_app_id": "reserve-fund",
-    "target_ledger": "transactions"
+    "target_ledger": "transactions",
+    "billable_member_filter": {
+      "require_email": true,
+      "exclude_roles": ["child"]
+    }
   }
 }
