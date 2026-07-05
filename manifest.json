@@ -30,7 +30,7 @@
       "visibility_column": "visibility",
       "everyone_values": ["everyone"],
       "write_privileged_only": true,
-      "bypass_group_setting": { "settings_table": "settings", "settings_key": "board_group_id" }
+      "privileged_groups": [{ "settings_table": "settings", "settings_key": "board_group_id" }]
     }
   },
   "admin_config": {
