@@ -1,0 +1,28 @@
+{
+  "scenarios": [
+    {
+      "name": "assessments are writable only by the treasurer group",
+      "members": {
+        "member": "adult"
+      },
+      "steps": [
+        {
+          "action": "db",
+          "as": "member",
+          "sql": "UPDATE app_dues_contributions__assessments SET visibility = 'everyone'",
+          "expect": {
+            "status": 403
+          }
+        },
+        {
+          "action": "db",
+          "as": "member",
+          "sql": "DELETE FROM app_dues_contributions__assessments",
+          "expect": {
+            "status": 403
+          }
+        }
+      ]
+    }
+  ]
+}
