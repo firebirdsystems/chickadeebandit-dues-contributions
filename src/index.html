@@ -321,7 +321,10 @@
 
 <script type="module">
 import { hubAlert, esc, hubConfirm, memberColor, initial } from "/hub-sdk.js";
-import { canManageDues as _canManageDues } from "./logic.js";
+import {
+  canManageDues as _canManageDues,
+  todayStr, safeParse, isDuesEligibleMember, allocTotal, memberDuesStatus,
+} from "./logic.js";
 
 const CONTEXT         = window.__CONTEXT_URL     ?? "";
 const DB              = window.__DB_URL           ?? "";
@@ -447,7 +450,6 @@ function fmtDate(iso) {
   const [y, m, d] = iso.split("-");
   return `${m}/${d}/${y}`;
 }
-function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 // ── Data loading (D1) ────────────────────────────────────────────────────────
 async function loadData() {
@@ -475,11 +477,6 @@ async function loadData() {
     memberIds: safeParse(r.member_ids, ["all"]), createdAt: r.created_at,
   }));
   boardGroupId = setRows.rows?.[0]?.value ?? "";
-}
-
-function safeParse(v, fallback) {
-  if (v == null || v === "") return fallback;
-  try { return JSON.parse(v); } catch { return fallback; }
 }
 
 async function loadMembers() {
@@ -547,10 +544,6 @@ function getMemberPayments(periodId, memberId) {
   return paymentsByPeriodMember.get(periodId)?.get(memberId) ?? [];
 }
 
-function isDuesEligibleMember(member) {
-  return member?.role !== "child" && typeof member?.email === "string" && member.email.trim().length > 0;
-}
-
 function getDuesMembers() {
   return members.filter(isDuesEligibleMember);
 }
@@ -571,12 +564,13 @@ function getBillableMembers(period) {
 function getMemberStatus(memberId, period) {
   const pmts = getMemberPayments(period.id, memberId);
   const totalPaid = pmts.reduce((s, p) => s + Number(p.amountCents), 0);
-  if (isMemberSkipped(period, memberId)) return { status: "skipped", totalPaid };
-  const due = Number(period.amountDueCents);
-  const late = period.dueDate && todayStr() > period.dueDate;
-  if (totalPaid >= due) return { status: "paid", totalPaid };
-  if (totalPaid > 0)    return { status: late ? "overdue" : "partial", totalPaid };
-  return { status: late ? "overdue" : "pending", totalPaid };
+  return memberDuesStatus({
+    totalPaidCents: totalPaid,
+    amountDueCents: period.amountDueCents,
+    dueDate: period.dueDate,
+    skipped: isMemberSkipped(period, memberId),
+    today: todayStr(),
+  });
 }
 
 let _statsCache = { key: null, stats: null };
@@ -593,10 +587,6 @@ function getPeriodStats(period) {
   const stats = { paidCount, totalMembers: billableMembers.length, totalCollected, totalExpected };
   _statsCache = { key, stats };
   return stats;
-}
-
-function allocTotal(rules) {
-  return rules.reduce((s, r) => s + Number(r.basisPoints || 0), 0) / 100;
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────
