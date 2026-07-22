@@ -1,5 +1,6 @@
 {
   "id": "dues-contributions",
+  "contexts": ["household", "shared_space"],
   "name": "Dues & Contributions",
   "version": "2.0.0",
   "description": "Track organization dues collection — billing periods, per-member payment status, allocation rules that post immediately to reserve funds when dues are recorded, and period close reconciliation.",
