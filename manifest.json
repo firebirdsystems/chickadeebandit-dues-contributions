@@ -20,6 +20,16 @@
   "storage": "db",
   "db_plaintext_columns": ["posting_status", "allocation_rules", "skipped_member_ids", "date"],
   "icon": "💳",
+  "member_references": {
+    "periods": {
+      "column": "closed_by_id",
+      "on_removed": "keep"
+    },
+    "payments": {
+      "column": "recorded_by_id",
+      "on_removed": "keep"
+    }
+  },
   "nav": { "label": "Dues" },
   "row_policies": {
     "settings": { "kind": "app_config" },
