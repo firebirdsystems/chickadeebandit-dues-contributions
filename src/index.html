@@ -455,9 +455,9 @@ function fmtDate(iso) {
 async function loadData() {
   if (DEMO) { data = getDemoData(); return; }
   const [perRows, payRows, assRows, setRows] = await Promise.all([
-    db("SELECT * FROM app_dues_contributions__periods"),
-    db("SELECT * FROM app_dues_contributions__payments"),
-    db("SELECT * FROM app_dues_contributions__assessments"),
+    db("SELECT * FROM app_dues_contributions__periods ORDER BY created_at DESC LIMIT 500"),
+    db("SELECT * FROM app_dues_contributions__payments ORDER BY recorded_at DESC LIMIT 5000"),
+    db("SELECT * FROM app_dues_contributions__assessments ORDER BY created_at DESC LIMIT 500"),
     db("SELECT value FROM app_dues_contributions__settings WHERE key = 'board_group_id'"),
   ]);
   data.periods = (perRows.rows ?? []).map(r => ({

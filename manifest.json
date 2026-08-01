@@ -21,15 +21,23 @@
   "db_plaintext_columns": ["posting_status", "allocation_rules", "skipped_member_ids", "date"],
   "icon": "💳",
   "member_references": {
-    "periods": {
-      "column": "closed_by_id",
-      "on_removed": "keep"
-    },
-    "payments": {
-      "column": "recorded_by_id",
-      "on_removed": "keep"
-    }
+    "periods": [
+      { "column": "closed_by_id", "on_removed": "keep" },
+      { "column": "created_by", "on_removed": "keep" },
+      { "column": "skipped_member_ids", "on_removed": "prune_list" }
+    ],
+    "payments": [
+      { "column": "recorded_by_id", "on_removed": "keep" },
+      { "column": "created_by", "on_removed": "keep" },
+      { "column": "member_id", "on_removed": "keep" }
+    ],
+    "assessments": [
+      { "column": "created_by", "on_removed": "keep" },
+      { "column": "member_ids", "on_removed": "prune_list" }
+    ]
   },
+  "kiosk": "never",
+  "resource_limits": { "max_db_bytes": 104857600 },
   "nav": { "label": "Dues" },
   "row_policies": {
     "settings": { "kind": "app_config" },
