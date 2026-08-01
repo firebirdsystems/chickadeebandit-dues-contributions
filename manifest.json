@@ -39,6 +39,31 @@
   "kiosk": "never",
   "resource_limits": { "max_db_bytes": 104857600 },
   "nav": { "label": "Dues" },
+  "agenda": [
+    {
+      "kind": "reminder",
+      "label": "Dues due",
+      "source": {
+        "kind": "sql",
+        "query": "SELECT id AS id, label AS title, due_date AS when_at FROM app_dues_contributions__periods WHERE status = 'open' AND due_date = :today ORDER BY created_at LIMIT 20"
+      }
+    },
+    {
+      "kind": "reminder",
+      "label": "Assessment due",
+      "source": {
+        "kind": "sql",
+        "query": "SELECT id AS id, label AS title, due_date AS when_at FROM app_dues_contributions__assessments WHERE due_date = :today ORDER BY created_at LIMIT 20"
+      }
+    }
+  ],
+  "glance": {
+    "source": {
+      "kind": "sql",
+      "query": "SELECT COUNT(*) AS n FROM app_dues_contributions__periods WHERE status = 'open' AND due_date IS NOT NULL AND due_date <> '' AND due_date <= :today LIMIT 1"
+    },
+    "display": { "template": "badge", "count": "n", "label": "dues periods due", "severity": "warn" }
+  },
   "row_policies": {
     "settings": { "kind": "app_config" },
     "periods": { "kind": "endpoint_only", "read": "everyone" },
