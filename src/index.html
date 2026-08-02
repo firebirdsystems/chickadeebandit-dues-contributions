@@ -332,6 +332,7 @@ const ADMIN_CONFIG    = window.__ADMIN_CONFIG_URL ?? "";
 const APP_ID          = window.__APP_ID          ?? "dues-contributions";
 const FINANCE_URL     = `/run/${APP_ID}/api/finance`;
 const ME              = window.__CURRENT_MEMBER  ?? null;
+const EVENTS          = window.__EVENTS_URL       ?? "";
 const IS_ADMIN        = !!ME?.isAdmin;
 const DEMO            = !DB;
 
@@ -366,6 +367,21 @@ async function db(sql, params = []) {
     throw new Error(msg);
   }
   return res.json();
+}
+
+// Best-effort: the finance endpoint has already committed, so a failed publish
+// must never surface as a failed write.
+async function publishEvent(type, subjectId, payload = {}) {
+  if (!EVENTS) return;
+  try {
+    await fetch(EVENTS, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, subject_id: subjectId, payload }),
+    });
+  } catch {
+    // ignored on purpose
+  }
 }
 
 async function finance(resource, payload) {
@@ -976,6 +992,11 @@ window.closePeriod = async function() {
     period.closedAt = result.closed_at;
     period.reconciliation = result.reconciliation;
     render();
+    await publishEvent("dues.period_closed", period.id, {
+      label: period.label,
+      due_date: period.dueDate ?? null,
+      closed_at: result.closed_at,
+    });
     openReconModal(period);
   } catch (e) { hubAlert(e.message ?? "Close failed"); }
 };
@@ -1082,6 +1103,13 @@ window.submitPayment = async function(memberId) {
     addPaymentToIndex(payment);
     closeModal();
     patchAfterPayment(memberId, period);
+    await publishEvent("dues.payment_recorded", payment.id, {
+      period_id: payment.periodId,
+      period_label: period.label,
+      member_id: memberId,
+      amount_cents: amountCents,
+      date,
+    });
     if (result.warning) hubAlert(result.warning);
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Record Payment"; }

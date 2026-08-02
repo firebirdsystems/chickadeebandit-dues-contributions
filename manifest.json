@@ -39,6 +39,14 @@
   "kiosk": "never",
   "resource_limits": { "max_db_bytes": 104857600 },
   "nav": { "label": "Dues" },
+  "publishes": [
+    "dues.payment_recorded",
+    "dues.period_closed"
+  ],
+  "publish_acls": {
+    "dues.payment_recorded": { "require_role": "adult" },
+    "dues.period_closed": { "require_role": "adult" }
+  },
   "agenda": [
     {
       "kind": "reminder",
