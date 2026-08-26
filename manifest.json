@@ -18,6 +18,10 @@
     "requires_approval": true
   },
   "storage": "db",
+  "preload": {
+    "assessments": {"sql": "SELECT * FROM app_dues_contributions__assessments ORDER BY created_at DESC LIMIT 500"},
+    "settings": {"sql": "SELECT value FROM app_dues_contributions__settings WHERE key = 'board_group_id'"}
+  },
   "db_plaintext_columns": ["posting_status", "allocation_rules", "skipped_member_ids", "date"],
   "icon": "💳",
   "member_references": {
