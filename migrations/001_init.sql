@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS app_dues_contributions__assessments (
   label      TEXT NOT NULL,
   amount_cents INTEGER NOT NULL DEFAULT 0 CHECK (amount_cents > 0),
   due_date   TEXT,
+  -- cb:plaintext-literal member_ids — the "everyone" sentinel, not a member list; a real assessment audience is written through the codec and stays encrypted
   member_ids TEXT NOT NULL DEFAULT '["all"]',
   visibility TEXT NOT NULL DEFAULT 'everyone' CHECK (visibility = 'everyone'),
   created_by TEXT NOT NULL,

@@ -1,6 +1,6 @@
 {
   "name": "chickadee-app-template",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Template for building Chickadee Bandit marketplace apps",
   "type": "module",
   "scripts": {
