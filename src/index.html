@@ -518,11 +518,14 @@ async function loadFundsList() {
 // ── Demo data ──────────────────────────────────────────────────────────────
 function getDemoMembers() {
   return [
-    { id: "m1", name: "Alice Johnson", role: "adult", email: "alice@example.com", isAdmin: true },
-    { id: "m2", name: "Bob Smith",     role: "adult", email: "bob@example.com" },
-    { id: "m3", name: "Carol Davis",   role: "adult", email: "carol@example.com" },
-    { id: "m4", name: "David Lee",     role: "adult" },
-    { id: "m5", name: "Ella Lee",      role: "child", email: "ella@example.com" },
+    // Shaped exactly like a `family.members` row: the hub projects `hasEmail`,
+    // never the address. Demo rows that carried `email` are what let the billable
+    // filter look correct here while matching nobody against the real hub.
+    { id: "m1", name: "Alice Johnson", role: "adult", hasEmail: true,  isAdmin: true },
+    { id: "m2", name: "Bob Smith",     role: "adult", hasEmail: true },
+    { id: "m3", name: "Carol Davis",   role: "adult", hasEmail: true },
+    { id: "m4", name: "David Lee",     role: "adult", hasEmail: false },
+    { id: "m5", name: "Ella Lee",      role: "child", hasEmail: true },
   ];
 }
 function getDemoFunds() {
@@ -714,7 +717,7 @@ function renderMain() {
   el.innerHTML = `
     <div class="summary-card ${locked ? "locked" : "open"}">
       <div class="summary-header">
-        <h2>${esc(period.label)}</h2>
+        <h2 data-testid="period-title" data-period-id="${esc(period.id)}">${esc(period.label)}</h2>
         <span class="badge ${locked ? "badge-locked" : "badge-open"}">${closing ? "Closing" : locked ? "Closed" : "Open"}</span>
         ${summaryActions}
       </div>
@@ -746,13 +749,13 @@ function buildMemberRow(m, period, locked) {
   ).join("");
   const color = memberColor(m.id, members);
   const ini = initial(m.name);
-  return `<tr id="row-${esc(m.id)}">
+  return `<tr id="row-${esc(m.id)}" data-testid="member-row" data-member-id="${esc(m.id)}">
     <td><span class="member-avatar" style="background:${color}">${esc(ini)}</span>${esc(m.name)}</td>
     <td class="amount-col">${skipped ? "—" : fmtDollars(period.amountDueCents)}</td>
     <td class="amount-col">${fmtDollars(totalPaid)}</td>
     <td><span class="badge ${bc}">${status}</span></td>
     <td class="payment-detail">${history || "<span style='color:var(--hub-text-muted,#9ca3af)'>none</span>"}</td>
-    ${amIBoard() ? `<td class="actions-col">${!locked ? `${!skipped ? `<button class="btn btn-sm btn-primary" onclick="openRecordPaymentModal('${esc(m.id)}')">Record Payment</button>` : ""}<button class="btn btn-sm" onclick="toggleMemberSkipped('${esc(m.id)}')">${skipped ? "Collect" : "Skip"}</button>` : ""}</td>` : ""}
+    ${amIBoard() ? `<td class="actions-col" data-testid="member-actions">${!locked ? `${!skipped ? `<button class="btn btn-sm btn-primary" onclick="openRecordPaymentModal('${esc(m.id)}')">Record Payment</button>` : ""}<button class="btn btn-sm" onclick="toggleMemberSkipped('${esc(m.id)}')">${skipped ? "Collect" : "Skip"}</button>` : ""}</td>` : ""}
   </tr>`;
 }
 
@@ -804,7 +807,7 @@ function buildAssessmentsSection() {
     <td>${a.memberIds?.includes("all") ? "All members" : `${a.memberIds?.length ?? 0} members`}</td>
     <td class="actions-col"><button class="btn btn-sm btn-danger" onclick="deleteAssessment('${esc(a.id)}')">Delete</button></td>
   </tr>`).join("");
-  return `<div class="section">
+  return `<div class="section" data-testid="assessments-section">
     <div class="section-header">
       <h3>Special Assessments</h3>
       <button class="btn btn-sm btn-primary" onclick="openNewAssessmentModal()">+ Assessment</button>

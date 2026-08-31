@@ -43,17 +43,27 @@ describe("safeParse", () => {
 });
 
 // ── isDuesEligibleMember ──────────────────────────────────────────────────────
+// Fixtures are `family.members` rows — { id, name, role, isAdmin?, hasEmail?,
+// hasLogin? }. They must NOT carry `email`: the hub never projects it, and
+// fixtures that did (the demo-data shape) are precisely what let the old
+// `member.email` predicate pass its tests while returning false for every real
+// member in production.
 describe("isDuesEligibleMember", () => {
-  it("accepts an adult with a non-empty email", () => {
-    expect(isDuesEligibleMember({ role: "adult", email: "a@example.com" })).toBe(true);
+  it("accepts an adult the hub reports as having an email on file", () => {
+    expect(isDuesEligibleMember({ role: "adult", hasEmail: true })).toBe(true);
   });
-  it("rejects children even with an email", () => {
-    expect(isDuesEligibleMember({ role: "child", email: "kid@example.com" })).toBe(false);
+  it("rejects children even with an email on file", () => {
+    expect(isDuesEligibleMember({ role: "child", hasEmail: true })).toBe(false);
   });
-  it("rejects adults with a missing or blank email", () => {
+  it("rejects adults with no email on file", () => {
+    expect(isDuesEligibleMember({ role: "adult", hasEmail: false })).toBe(false);
     expect(isDuesEligibleMember({ role: "adult" })).toBe(false);
-    expect(isDuesEligibleMember({ role: "adult", email: "" })).toBe(false);
-    expect(isDuesEligibleMember({ role: "adult", email: "   " })).toBe(false);
+  });
+  // Regression: reading `email` is the bug. `family.members` never carries the
+  // address, so a predicate that tests it is false for every real member — the
+  // roster never renders and closePeriod never warns about unpaid members.
+  it("does not read the address: an `email` field alone is not eligibility", () => {
+    expect(isDuesEligibleMember({ role: "adult", email: "a@example.com" })).toBe(false);
   });
   it("handles null/undefined members without throwing", () => {
     expect(isDuesEligibleMember(null)).toBe(false);

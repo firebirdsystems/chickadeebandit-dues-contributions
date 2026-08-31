@@ -1,0 +1,205 @@
+{
+  "scenarios": [
+    {
+      "name": "a special assessment the server hands to everyone is rendered only for the configured board group",
+      "members": {
+        "viewer": "adult",
+        "other": "adult"
+      },
+      "steps": [
+        {
+          "action": "seedGroup",
+          "group": "social",
+          "name": "Social Committee",
+          "members": [
+            "other"
+          ]
+        },
+        {
+          "action": "seedGroup",
+          "group": "board",
+          "name": "Board of Directors",
+          "members": [
+            "viewer"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dues_contributions__settings (key, value) VALUES ('board_group_id', ?)",
+          "params": [
+            "{{group:social}}"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, visibility, created_by, created_at) VALUES (?, ?, date('now','+20 days'), 12000, 'open', '[]', '[]', 'everyone', ?, datetime('now'))",
+          "params": [
+            "ui-period",
+            "2026 annual dues",
+            "{{viewer}}"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, 45000, date('now','+40 days'), '[\"all\"]', 'everyone', ?, datetime('now'))",
+          "params": [
+            "ui-assess",
+            "Roof reserve special assessment",
+            "{{viewer}}"
+          ]
+        },
+        {
+          "action": "open",
+          "as": "viewer"
+        },
+        {
+          "action": "expectVisible",
+          "as": "viewer",
+          "selector": "[data-testid=\"period-title\"][data-period-id=\"ui-period\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "viewer",
+          "selector": "[data-testid=\"assessments-section\"]",
+          "count": 0
+        },
+        {
+          "action": "expectNoText",
+          "as": "viewer",
+          "text": "Roof reserve special assessment"
+        },
+        {
+          "action": "seedRaw",
+          "sql": "UPDATE app_dues_contributions__settings SET value = ? WHERE key = 'board_group_id'",
+          "params": [
+            "{{group:board}}"
+          ]
+        },
+        {
+          "action": "reload",
+          "as": "viewer"
+        },
+        {
+          "action": "expectVisible",
+          "as": "viewer",
+          "selector": "[data-testid=\"period-title\"][data-period-id=\"ui-period\"]"
+        },
+        {
+          "action": "expectVisible",
+          "as": "viewer",
+          "selector": "[data-testid=\"assessments-section\"]"
+        },
+        {
+          "action": "expectText",
+          "as": "viewer",
+          "text": "Roof reserve special assessment",
+          "selector": "[data-testid=\"assessments-section\"]"
+        }
+      ]
+    },
+    {
+      "name": "the member payment roster is trimmed to your own row until the configured board group contains you",
+      "members": {
+        "viewer": "adult",
+        "other": "adult"
+      },
+      "steps": [
+        {
+          "action": "seedGroup",
+          "group": "social",
+          "name": "Social Committee",
+          "members": [
+            "other"
+          ]
+        },
+        {
+          "action": "seedGroup",
+          "group": "board",
+          "name": "Board of Directors",
+          "members": [
+            "viewer"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dues_contributions__settings (key, value) VALUES ('board_group_id', ?)",
+          "params": [
+            "{{group:social}}"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, visibility, created_by, created_at) VALUES (?, ?, date('now','+20 days'), 12000, 'open', '[]', '[]', 'everyone', ?, datetime('now'))",
+          "params": [
+            "ui-period",
+            "2026 annual dues",
+            "{{viewer}}"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, 'ui-period', ?, 12000, date('now'), '[]', 'posted', ?, datetime('now'), 'everyone', ?)",
+          "params": [
+            "ui-pay",
+            "{{other}}",
+            "{{viewer}}",
+            "{{viewer}}"
+          ]
+        },
+        {
+          "action": "open",
+          "as": "viewer"
+        },
+        {
+          "action": "expectVisible",
+          "as": "viewer",
+          "selector": "[data-testid=\"member-row\"]:nth-child(1)"
+        },
+        {
+          "action": "expectNoText",
+          "as": "viewer",
+          "text": "E2E dues-contributions-other"
+        },
+        {
+          "action": "expectCount",
+          "as": "viewer",
+          "selector": "[data-testid=\"member-actions\"]",
+          "count": 0
+        },
+        {
+          "action": "expectCount",
+          "as": "viewer",
+          "selector": "[data-testid=\"member-row\"]",
+          "count": 1
+        },
+        {
+          "action": "seedRaw",
+          "sql": "UPDATE app_dues_contributions__settings SET value = ? WHERE key = 'board_group_id'",
+          "params": [
+            "{{group:board}}"
+          ]
+        },
+        {
+          "action": "reload",
+          "as": "viewer"
+        },
+        {
+          "action": "expectVisible",
+          "as": "viewer",
+          "selector": "[data-testid=\"member-row\"]:nth-child(1)"
+        },
+        {
+          "action": "expectText",
+          "as": "viewer",
+          "text": "E2E dues-contributions-other"
+        },
+        {
+          "action": "expectCount",
+          "as": "viewer",
+          "selector": "[data-testid=\"member-row\"]",
+          "count": 3
+        }
+      ]
+    }
+  ]
+}

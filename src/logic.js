@@ -24,9 +24,16 @@ export function canManageDues(me, groups, boardGroupId) {
   return !!g && g.memberIds.includes(me.id);
 }
 
-/** Today as an ISO "YYYY-MM-DD" string (UTC), for due-date comparisons. */
+/**
+ * Today as "YYYY-MM-DD" on the DEVICE's calendar — the fallback for Node tests,
+ * NOT what the app uses. The browser imports `hubToday` from the hub SDK under
+ * this name, so due-date comparisons run on the household's calendar. It used
+ * to be UTC, which named yesterday all evening west of Greenwich and showed a
+ * payment as overdue a day early.
+ */
 export function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /** JSON.parse that never throws — returns `fallback` for null/empty/invalid input. */
@@ -36,15 +43,27 @@ export function safeParse(v, fallback) {
 }
 
 /**
- * Whether a household member is billable for dues: an adult (never a child)
- * with a non-empty email. Mirrors the roster the UI assesses and collects from.
+ * Whether a household member is billable for dues: not a child, and with an
+ * email on file.
  *
- * @param {object|null} member
+ * MUST mirror the hub's `eligibleFinanceMembers`, which applies this manifest's
+ * own `managed_finance.billable_member_filter` (`exclude_roles: ["child"]`,
+ * `require_email: true`) when it closes a period and writes the reconciliation.
+ *
+ * Read `hasEmail`, never `email`. `family.members` deliberately never projects
+ * the address — it is contact PII, stripped by the space directory rules and
+ * absent from `toFamilyContextMember` in every tenant. Testing `member.email`
+ * (as this did until the hub grew `hasEmail`) made the predicate false for
+ * everyone: the billable set was empty in every household, so the Member
+ * Payments roster never rendered, the period stats read 0/0 and $0 expected,
+ * and — the damaging one — `closePeriod`'s confirmation silently dropped its
+ * "N member(s) have not fully paid" warning while the server recorded exactly
+ * those members as overdue.
+ *
+ * @param {object|null} member  a `family.members` row
  */
 export function isDuesEligibleMember(member) {
-  return member?.role !== "child"
-    && typeof member?.email === "string"
-    && member.email.trim().length > 0;
+  return member?.role !== "child" && member?.hasEmail === true;
 }
 
 /**
