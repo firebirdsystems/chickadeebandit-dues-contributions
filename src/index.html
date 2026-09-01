@@ -320,10 +320,10 @@
 </div>
 
 <script type="module">
-import { hubAlert, esc, hubConfirm, memberColor, initial } from "/hub-sdk.js";
+import { hubAlert, esc, hubConfirm, memberColor, initial, hubToday} from "/hub-sdk.js";
 import {
   canManageDues as _canManageDues,
-  todayStr, safeParse, isDuesEligibleMember, allocTotal, memberDuesStatus,
+  safeParse, isDuesEligibleMember, allocTotal, memberDuesStatus,
 } from "./logic.js";
 
 const CONTEXT         = window.__CONTEXT_URL     ?? "";
@@ -588,7 +588,7 @@ function getMemberStatus(memberId, period) {
     amountDueCents: period.amountDueCents,
     dueDate: period.dueDate,
     skipped: isMemberSkipped(period, memberId),
-    today: todayStr(),
+    today: hubToday(),
   });
 }
 
@@ -1065,7 +1065,7 @@ window.openRecordPaymentModal = function(memberId) {
       </div>
       <div class="form-group">
         <label>Date</label>
-        <input id="f-pay-date" type="date" value="${todayStr()}">
+        <input id="f-pay-date" type="date" value="${hubToday()}">
       </div>
     </div>
     ${noFunds
