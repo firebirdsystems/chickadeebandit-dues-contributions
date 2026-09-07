@@ -58,4 +58,46 @@ describe("manifest.json", () => {
     expect(migration).toContain("amount_cents INTEGER");
     expect(migration).not.toMatch(/\bREAL\b/);
   });
+
+  // ── Calendar automation suggestions ────────────────────────────────────────
+  // The suggestion is the whole delivery mechanism: the household turns it on
+  // in settings, and the hub only offers one whose trigger has an installed
+  // publisher. A dropped key silently means no calendar entry ever appears.
+
+  it("publishes dues.period_opened under the same adult gate as its siblings", () => {
+    expect(manifest.publishes).toContain("dues.period_opened");
+    expect(manifest.publish_acls["dues.period_opened"]).toEqual({ require_role: "adult" });
+    for (const name of manifest.publishes) {
+      expect(manifest.publish_acls[name], `no publish_acl for ${name}`).toEqual({ require_role: "adult" });
+    }
+  });
+
+  it("every suggested trigger_event is an event this app actually publishes", () => {
+    for (const s of manifest.suggested_automations ?? []) {
+      expect(manifest.publishes, `unpublished trigger: ${s.trigger_event}`).toContain(s.trigger_event);
+    }
+  });
+
+  it("every calendar suggestion maps the params create_event requires", () => {
+    const creates = (manifest.suggested_automations ?? [])
+      .filter(s => s.target_app_id === "calendar" && s.action_id === "create_event");
+    expect(creates.length).toBeGreaterThan(0);
+    for (const s of creates) {
+      // event_date is required by the action; source_ref_id is what keeps one
+      // period to one entry, so an edited due date moves it instead of adding
+      // a second one and the retraction can find what this made.
+      expect(s.param_map.title).toEqual({ kind: "payload_field", value: "review_title" });
+      expect(s.param_map.event_date).toEqual({ kind: "payload_field", value: "due_date" });
+      expect(s.param_map.description).toEqual({ kind: "payload_field", value: "summary" });
+      expect(s.param_map.source_ref_id).toEqual({ kind: "payload_field", value: "source_ref_id" });
+    }
+  });
+
+  it("ships the retraction half, matched on the same source_ref_id", () => {
+    const retract = (manifest.suggested_automations ?? [])
+      .find(s => s.target_app_id === "calendar" && s.action_id === "retract_dated_event");
+    expect(retract, "no retract_dated_event suggestion").toBeTruthy();
+    expect(retract.trigger_event).toBe("dues.period_closed");
+    expect(retract.param_map.source_ref_id).toEqual({ kind: "payload_field", value: "source_ref_id" });
+  });
 });

@@ -103,3 +103,91 @@ export function memberDuesStatus({ totalPaidCents, amountDueCents, dueDate, skip
   if (totalPaid > 0)    return { status: late ? "overdue" : "partial", totalPaid };
   return { status: late ? "overdue" : "pending", totalPaid };
 }
+
+// ── Calendar hand-off ────────────────────────────────────────────────────────
+// A period's due date is the one date in this app the whole organization needs
+// on a shared calendar. Everything else the app knows about money — what a
+// member owes, what they have paid, their balance — deliberately stays out of
+// the event payload: `assessments` is `owner_or_visibility` and `payments` is
+// `endpoint_only`, so per-member money is NOT scope-wide readable, while an
+// automation payload lands wherever the household's rule sends it (including an
+// external calendar through the ICS feed). Only the period's label and due date
+// go out.
+
+/**
+ * Steady identity for the calendar entry a period's due date becomes.
+ *
+ * The event id is fresh on every publish, so it can only ever say "this is a
+ * new event", never "this is the same period as last time". Without a stable
+ * ref, editing a due date lands a SECOND calendar entry beside the stale first
+ * one, and a retraction can never find what it made. Namespaced by app because
+ * the key shares a column with every other publisher's.
+ *
+ * @param {string} periodId
+ */
+export function periodSourceRefId(periodId) {
+  return `dues-contributions:${periodId}`;
+}
+
+/**
+ * Whether a period should put its due date on the calendar at all.
+ *
+ * A locked period's deadline is spent — the money is reconciled and the period
+ * is closed against edits — and a period with no usable due date has no day to
+ * name. The date test is strict on purpose: the calendar's `create_event`
+ * requires `event_date`, and an empty string counts as MISSING, so publishing
+ * one fails the whole automation run with `missing required param`.
+ *
+ * @param {{status?: string, dueDate?: string|null}|null} period
+ */
+export function wantsDueDateEntry(period) {
+  if (!period) return false;
+  return period.status !== "locked"
+    && /^\d{4}-\d{2}-\d{2}$/.test(String(period.dueDate ?? ""));
+}
+
+/**
+ * Why an edit stopped a period from wanting a calendar entry, or null if it
+ * still wants one (or never did).
+ *
+ * The TRANSITION is what matters, not the end state. Announcing is idempotent
+ * — the calendar upserts on source_ref_id — so re-announcing is free, but a
+ * retraction published on every save would burn an automation run per typo fix
+ * to update zero rows, and rules are rate limited per day. So this returns null
+ * unless the period *was* announcing and now is not.
+ *
+ * @param {object|null} prev
+ * @param {object|null} next
+ */
+export function dueDateRetractionReason(prev, next) {
+  if (!prev || !wantsDueDateEntry(prev) || wantsDueDateEntry(next)) return null;
+  if (next?.status === "locked") return "closed";
+  return "due_date_cleared";
+}
+
+/**
+ * Whether an edit touched anything the calendar entry is *scheduled* from.
+ *
+ * Only fields that move the day, or that decide whether there is an entry at
+ * all, belong here. `label` deliberately does NOT: it reaches the event as
+ * cosmetic text (the review title), and the amount due never reaches it at all.
+ * Re-announcing for a renamed period would publish a fresh event for a date
+ * that has not moved — an automation run spent to rewrite the same row.
+ *
+ * @param {object|null} prev
+ * @param {object} next
+ */
+export function dueDateInputsChanged(prev, next) {
+  if (!prev) return true;
+  return ["dueDate", "status"].some(k => String(prev[k] ?? "") !== String(next[k] ?? ""));
+}
+
+/** Title of the calendar entry a due date becomes. Label only — never money. */
+export function periodReviewTitle(period) {
+  return `${period?.label ?? "Dues"} dues due`;
+}
+
+/** Second line of that entry: what the day means, with no per-member figures. */
+export function periodDueSummary(period) {
+  return `Dues for ${period?.label ?? "this period"} are due. Record contributions in Dues & Contributions.`;
+}

@@ -324,6 +324,8 @@ import { hubAlert, esc, hubConfirm, memberColor, initial, hubToday} from "/hub-s
 import {
   canManageDues as _canManageDues,
   safeParse, isDuesEligibleMember, allocTotal, memberDuesStatus,
+  periodSourceRefId, wantsDueDateEntry, dueDateRetractionReason,
+  dueDateInputsChanged, periodReviewTitle, periodDueSummary,
 } from "./logic.js";
 
 const CONTEXT         = window.__CONTEXT_URL     ?? "";
@@ -382,6 +384,57 @@ async function publishEvent(type, subjectId, payload = {}) {
   } catch {
     // ignored on purpose
   }
+}
+
+/**
+ * Say that a period's due date is a date the organization is expected to keep,
+ * so a household rule can put it on the calendar. Published on create and again
+ * whenever the due date moves; the calendar upserts on source_ref_id, so a
+ * re-announcement MOVES the entry that already exists instead of adding a
+ * second one beside it.
+ *
+ * Guarded, not conditional at the call site: `create_event` requires
+ * `event_date`, and a blank one counts as missing, which fails the whole
+ * automation run with `missing required param`. A period with no due date, or
+ * one already locked, simply never announces.
+ *
+ * Nothing about who owes what goes in the payload. `assessments` is
+ * owner_or_visibility and `payments` is endpoint_only, so per-member money is
+ * not scope-wide readable — and an automation payload can leave the household
+ * entirely through the calendar's ICS feed. Label and due date only.
+ */
+async function announcePeriodDueDate(period) {
+  if (!wantsDueDateEntry(period)) return;
+  await publishEvent("dues.period_opened", period.id, {
+    source_ref_id: periodSourceRefId(period.id),
+    label: period.label,
+    due_date: period.dueDate,
+    review_title: periodReviewTitle(period),
+    summary: periodDueSummary(period),
+  });
+}
+
+/**
+ * Say that an announced due date no longer applies, so a rule can take the
+ * entry back down. Carries the SAME source_ref_id the announcement used — that
+ * is the whole mechanism: the calendar's retraction is scoped by it, and a
+ * mismatch would silently retract nothing.
+ *
+ * This deliberately reuses `dues.period_closed` rather than inventing a second
+ * retraction event. Closing is the ordinary way a due date stops meaning
+ * anything, so the two remaining ways out — deleting the period, or clearing
+ * its due date — publish the same event with a `reason`, and one rule covers
+ * all three. A household that never added the retraction rule is unaffected:
+ * the event has always been published on close.
+ */
+async function retractPeriodDueDate(period, reason, extra = {}) {
+  await publishEvent("dues.period_closed", period.id, {
+    source_ref_id: periodSourceRefId(period.id),
+    label: period.label,
+    due_date: period.dueDate ?? null,
+    reason,
+    ...extra,
+  });
 }
 
 async function finance(resource, payload) {
@@ -885,13 +938,15 @@ window.submitNewPeriod = async function() {
     const result = await finance("periods", {
       action: "create", id, label, due_date: due || null, amount_due_cents: amountCents,
     });
-    data.periods.push({
+    const created = {
       id, label, dueDate: due || null, amountDueCents: amountCents,
       status: "open", allocationRules: [], skippedMemberIds: [], reconciliation: null, createdAt: result.created_at,
-    });
+    };
+    data.periods.push(created);
     selectedPeriodId = id;
     closeModal();
     render();
+    await announcePeriodDueDate(created);
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Create Period"; }
     hubAlert(e.message ?? "Create failed");
@@ -936,6 +991,7 @@ window.submitEditPeriod = async function() {
     const period = data.periods.find(p => p.id === selectedPeriodId);
     if (!period) return;
     const newAmountCents = Number.isInteger(amountCents) ? amountCents : period.amountDueCents;
+    const prev = { ...period };
     await finance("periods", {
       action: "update", id: period.id, label,
       amount_due_cents: newAmountCents, due_date: due || null,
@@ -945,6 +1001,14 @@ window.submitEditPeriod = async function() {
     period.dueDate = due || null;
     closeModal();
     render();
+    // Only when the edit touched the day itself. A renamed period, or a
+    // corrected amount, cannot move the calendar entry, and re-publishing for
+    // one would spend an automation run rewriting the same row.
+    if (dueDateInputsChanged(prev, period)) {
+      const reason = dueDateRetractionReason(prev, period);
+      if (reason) await retractPeriodDueDate(period, reason);
+      else await announcePeriodDueDate(period);
+    }
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save"; }
     hubAlert(e.message ?? "Save failed");
@@ -972,6 +1036,9 @@ window.deletePeriod = async function() {
     rebuildIndexes();
     selectedPeriodId = data.periods[0]?.id ?? null;
     render();
+    // A deleted period's calendar entry would otherwise stand forever naming a
+    // deadline nothing is behind. Only when it had one to take down.
+    if (wantsDueDateEntry(period)) await retractPeriodDueDate(period, "deleted");
   } catch (e) { hubAlert(e.message ?? "Delete failed"); }
 };
 
@@ -995,9 +1062,15 @@ window.closePeriod = async function() {
     period.closedAt = result.closed_at;
     period.reconciliation = result.reconciliation;
     render();
+    // The source_ref_id is what makes this a retraction as well as a
+    // notification: a closed period's due date is spent, and this is the same
+    // ref `dues.period_opened` announced with, so the calendar rule can find
+    // exactly the entry it made. A mismatch would silently retract nothing.
     await publishEvent("dues.period_closed", period.id, {
+      source_ref_id: periodSourceRefId(period.id),
       label: period.label,
       due_date: period.dueDate ?? null,
+      reason: "closed",
       closed_at: result.closed_at,
     });
     openReconModal(period);

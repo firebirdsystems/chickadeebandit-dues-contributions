@@ -6,6 +6,12 @@ import {
   isDuesEligibleMember,
   allocTotal,
   memberDuesStatus,
+  periodSourceRefId,
+  wantsDueDateEntry,
+  dueDateRetractionReason,
+  dueDateInputsChanged,
+  periodReviewTitle,
+  periodDueSummary,
 } from "../src/logic.js";
 import { testPrivilegedGateContract } from "./helpers/privileged-gate.mjs";
 
@@ -126,5 +132,91 @@ describe("memberDuesStatus", () => {
 
   it("returns the computed totalPaid alongside the status", () => {
     expect(memberDuesStatus({ ...base, totalPaidCents: 5000 }).totalPaid).toBe(5000);
+  });
+});
+
+// ── Calendar hand-off ─────────────────────────────────────────────────────────
+// The due date is the only thing this app puts on a shared calendar, and the
+// mechanism that keeps one period to one entry is the stable source_ref_id.
+
+describe("periodSourceRefId", () => {
+  it("is namespaced by app and keyed on the period, so it is stable across publishes", () => {
+    expect(periodSourceRefId("p1")).toBe("dues-contributions:p1");
+    expect(periodSourceRefId("p1")).toBe(periodSourceRefId("p1"));
+    expect(periodSourceRefId("p2")).not.toBe(periodSourceRefId("p1"));
+  });
+});
+
+describe("wantsDueDateEntry", () => {
+  const open = { id: "p1", label: "May 2026", status: "open", dueDate: "2026-05-15" };
+
+  it("wants an entry for an open period with a real yyyy-mm-dd due date", () => {
+    expect(wantsDueDateEntry(open)).toBe(true);
+  });
+
+  it("refuses a blank or missing due date — an empty event_date fails the run as a missing param", () => {
+    expect(wantsDueDateEntry({ ...open, dueDate: "" })).toBe(false);
+    expect(wantsDueDateEntry({ ...open, dueDate: null })).toBe(false);
+    expect(wantsDueDateEntry({ ...open, dueDate: undefined })).toBe(false);
+    expect(wantsDueDateEntry({ ...open, dueDate: "May 15" })).toBe(false);
+    expect(wantsDueDateEntry(null)).toBe(false);
+  });
+
+  it("refuses a locked period — a closed period's deadline is spent", () => {
+    expect(wantsDueDateEntry({ ...open, status: "locked" })).toBe(false);
+  });
+});
+
+describe("dueDateRetractionReason", () => {
+  const open = { id: "p1", label: "May 2026", status: "open", dueDate: "2026-05-15" };
+
+  it("is null while the period still wants an entry, moved date included", () => {
+    expect(dueDateRetractionReason(open, open)).toBe(null);
+    expect(dueDateRetractionReason(open, { ...open, dueDate: "2026-05-20" })).toBe(null);
+  });
+
+  it("is null for a period that never announced — nothing to take down", () => {
+    const dateless = { ...open, dueDate: null };
+    expect(dueDateRetractionReason(dateless, { ...dateless, label: "Renamed" })).toBe(null);
+    expect(dueDateRetractionReason(null, open)).toBe(null);
+  });
+
+  it("names the transition out of wanting an entry", () => {
+    expect(dueDateRetractionReason(open, { ...open, status: "locked" })).toBe("closed");
+    expect(dueDateRetractionReason(open, { ...open, dueDate: "" })).toBe("due_date_cleared");
+  });
+});
+
+describe("dueDateInputsChanged", () => {
+  const open = { id: "p1", label: "May 2026", status: "open", dueDate: "2026-05-15", amountDueCents: 20000 };
+
+  it("is true when the day moves or the period closes", () => {
+    expect(dueDateInputsChanged(open, { ...open, dueDate: "2026-05-20" })).toBe(true);
+    expect(dueDateInputsChanged(open, { ...open, status: "locked" })).toBe(true);
+    expect(dueDateInputsChanged(null, open)).toBe(true);
+  });
+
+  it("is false for a cosmetic edit that cannot move the entry", () => {
+    expect(dueDateInputsChanged(open, { ...open, label: "May 2026 (rev)" })).toBe(false);
+    expect(dueDateInputsChanged(open, { ...open, amountDueCents: 30000 })).toBe(false);
+  });
+});
+
+describe("periodReviewTitle / periodDueSummary", () => {
+  const period = { id: "p1", label: "May 2026", status: "open", dueDate: "2026-05-15", amountDueCents: 20000 };
+
+  it("names the period and nothing else", () => {
+    expect(periodReviewTitle(period)).toBe("May 2026 dues due");
+  });
+
+  it("never leaks per-member money into the calendar payload", () => {
+    // `assessments` is owner_or_visibility and `payments` is endpoint_only, so
+    // amounts and balances are not scope-wide readable — and the entry can
+    // leave the household entirely through the calendar's ICS feed.
+    const text = `${periodReviewTitle(period)} ${periodDueSummary(period)}`;
+    expect(text).not.toContain("$");
+    expect(text).not.toContain("20000");
+    expect(text).not.toContain("200.00");
+    expect(text).not.toMatch(/paid|owed|balance|overdue/i);
   });
 });

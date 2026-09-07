@@ -45,12 +45,39 @@
   "nav": { "label": "Dues" },
   "publishes": [
     "dues.payment_recorded",
+    "dues.period_opened",
     "dues.period_closed"
   ],
   "publish_acls": {
     "dues.payment_recorded": { "require_role": "adult" },
+    "dues.period_opened": { "require_role": "adult" },
     "dues.period_closed": { "require_role": "adult" }
   },
+  "suggested_automations": [
+    {
+      "title": "Put each billing period's due date on the calendar",
+      "description": "When a billing period is created — or its due date moves — put an all-day event on the calendar for the day dues are due. The deadline is the one thing every member needs in front of them, and the calendar is where the organization already looks. Editing the date moves the entry that is already there instead of adding a second one beside it. Only the period's label and its due date go out: no member's balance, amount owed, or payment status is ever part of the entry.",
+      "trigger_event": "dues.period_opened",
+      "target_app_id": "calendar",
+      "action_id": "create_event",
+      "param_map": {
+        "title": { "kind": "payload_field", "value": "review_title" },
+        "event_date": { "kind": "payload_field", "value": "due_date" },
+        "description": { "kind": "payload_field", "value": "summary" },
+        "source_ref_id": { "kind": "payload_field", "value": "source_ref_id" }
+      }
+    },
+    {
+      "title": "Take a closed period's due date back off the calendar",
+      "description": "The other half of the rule above, and it only does anything if you have that one. When a billing period is closed, deleted, or has its due date cleared, the entry it put on the calendar stops showing — instead of standing as a deadline the organization has already settled. Add both, or the due date outlives the period.",
+      "trigger_event": "dues.period_closed",
+      "target_app_id": "calendar",
+      "action_id": "retract_dated_event",
+      "param_map": {
+        "source_ref_id": { "kind": "payload_field", "value": "source_ref_id" }
+      }
+    }
+  ],
   "agenda": [
     {
       "kind": "reminder",
