@@ -57,7 +57,7 @@
     .btn-primary { background: var(--hub-primary, #2563eb); color: var(--hub-primary-fg, #fff); border-color: transparent; }
     .btn-primary:hover { background: var(--hub-primary-hover, #1d4ed8); opacity: 1; }
     .btn-danger { color: #dc2626; border-color: #fca5a5; }
-    .btn-danger:hover { background: #fef2f2; opacity: 1; }
+    .btn-danger:hover { background: var(--hub-bg, #fef2f2); opacity: 1; }
     .btn-sm { padding: 3px 10px; font-size: 0.78rem; }
 
     /* ── Layout ── */
@@ -90,13 +90,13 @@
       text-transform: uppercase;
       letter-spacing: .03em;
     }
-    .badge-open { background: #dcfce7; color: #16a34a; }
-    .badge-locked { background: #f3f4f6; color: #6b7280; }
-    .badge-paid { background: #dcfce7; color: #16a34a; }
+    .badge-open { background: var(--hub-tint-success, #dcfce7); color: var(--hub-tint-success-fg, #16a34a); }
+    .badge-locked { background: var(--hub-bg, #f3f4f6); color: var(--hub-text-muted, #6b7280); }
+    .badge-paid { background: var(--hub-tint-success, #dcfce7); color: var(--hub-tint-success-fg, #16a34a); }
     .badge-partial { background: #fef9c3; color: #854d0e; }
-    .badge-overdue { background: #fee2e2; color: #dc2626; }
-    .badge-pending { background: #f3f4f6; color: #6b7280; }
-    .badge-special { background: #ede9fe; color: #7c3aed; }
+    .badge-overdue { background: var(--hub-tint-danger, #fee2e2); color: var(--hub-tint-danger-fg, #dc2626); }
+    .badge-pending { background: var(--hub-bg, #f3f4f6); color: var(--hub-text-muted, #6b7280); }
+    .badge-special { background: var(--hub-tint-accent, #ede9fe); color: var(--hub-tint-accent-fg, #7c3aed); }
     .summary-stats {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
