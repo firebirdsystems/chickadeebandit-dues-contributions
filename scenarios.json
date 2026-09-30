@@ -23,6 +23,144 @@
           }
         }
       ]
+    },
+    {
+      "name": "a child can read the dues ledger but cannot record or alter payments or periods",
+      "members": { "kid": "child", "parent": "adult" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dues_contributions__periods (id, label, amount_due_cents, status, visibility, created_by, created_at) VALUES ('p1', 'Q1 dues', 5000, 'open', 'everyone', ?, ?)",
+          "params": ["{{parent}}", "2026-01-01T00:00:00Z"]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, recorded_by_id, recorded_at, visibility, created_by) VALUES ('pay1', 'p1', ?, 2500, '2026-01-02', ?, ?, 'everyone', ?)",
+          "params": ["{{kid}}", "{{parent}}", "2026-01-01T00:00:00Z", "{{parent}}"]
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "SELECT id, label FROM app_dues_contributions__periods",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "p1" }] }
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "SELECT id, member_id FROM app_dues_contributions__payments",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "pay1", "member_id": "scn-kid" }] }
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, recorded_by_id, recorded_at, visibility, created_by) VALUES ('pay2', 'p1', ?, 2500, '2026-01-03', ?, ?, 'everyone', ?)",
+          "params": ["{{kid}}", "{{kid}}", "2026-01-01T00:00:00Z", "{{kid}}"],
+          "expect": { "status": 403 }
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "UPDATE app_dues_contributions__payments SET amount_cents = 5000 WHERE id = 'pay1'",
+          "expect": { "status": 403 }
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "UPDATE app_dues_contributions__periods SET status = 'locked' WHERE id = 'p1'",
+          "expect": { "status": 403 }
+        },
+        {
+          "action": "db",
+          "as": "parent",
+          "sql": "SELECT id, status FROM app_dues_contributions__periods",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "p1", "status": "open" }] }
+        },
+        {
+          "action": "db",
+          "as": "parent",
+          "sql": "SELECT id, amount_cents FROM app_dues_contributions__payments",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "pay1", "amount_cents": 2500 }] }
+        }
+      ]
+    },
+    {
+      "name": "a child can see assessments but cannot edit or delete them",
+      "members": { "kid": "child", "parent": "adult" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, visibility, created_by, created_at) VALUES ('a1', 'Roof levy', 10000, 'everyone', ?, ?)",
+          "params": ["{{parent}}", "2026-01-01T00:00:00Z"]
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "SELECT id, label FROM app_dues_contributions__assessments",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "a1" }] }
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "UPDATE app_dues_contributions__assessments SET label = 'tampered' WHERE id = 'a1'",
+          "expect": { "status": 403 }
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "DELETE FROM app_dues_contributions__assessments WHERE id = 'a1'",
+          "expect": { "status": 403 }
+        },
+        {
+          "action": "db",
+          "as": "parent",
+          "sql": "SELECT id, label FROM app_dues_contributions__assessments",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "a1", "label": "Roof levy" }] }
+        }
+      ]
+    },
+    {
+      "name": "a board-group member posts and edits assessments; a plain adult outside the group is refused",
+      "members": { "treasurer": "adult", "member": "adult" },
+      "steps": [
+        { "action": "seedGroup", "group": "board", "name": "Board", "members": ["treasurer"] },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dues_contributions__settings (key, value) VALUES ('board_group_id', ?)",
+          "params": ["{{group:board}}"]
+        },
+        {
+          "action": "db",
+          "as": "treasurer",
+          "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+          "params": ["as1", "Annual dues", 12000, "{{treasurer}}", "2026-01-01T00:00:00Z"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "member",
+          "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+          "params": ["as2", "Special levy", 5000, "{{member}}", "2026-01-01T00:00:00Z"],
+          "expect": { "status": 403 }
+        },
+        {
+          "action": "db",
+          "as": "member",
+          "sql": "UPDATE app_dues_contributions__assessments SET amount_cents = 1 WHERE id = 'as1'",
+          "expect": { "status": 403 }
+        },
+        {
+          "action": "db",
+          "as": "treasurer",
+          "sql": "UPDATE app_dues_contributions__assessments SET amount_cents = 13000 WHERE id = 'as1'",
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "member",
+          "sql": "SELECT id, amount_cents FROM app_dues_contributions__assessments",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "as1", "amount_cents": 13000 }] }
+        }
+      ]
     }
   ]
 }
