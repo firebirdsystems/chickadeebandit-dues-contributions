@@ -320,7 +320,7 @@
 </div>
 
 <script type="module">
-import { hubAlert, esc, hubConfirm, memberColor, initial, hubToday} from "/hub-sdk.js";
+import { hubAlert, esc, hubConfirm, memberColor, initial, hubToday, glyph } from "/hub-sdk.js";
 import {
   canManageDues as _canManageDues,
   safeParse, isDuesEligibleMember, allocTotal, memberDuesStatus,
@@ -687,7 +687,7 @@ function populatePeriodSelect() {
 function renderHeaderActions() {
   const wrap = document.getElementById("header-actions");
   // Admin-only Board config entry (sets board_group_id via the admin endpoint).
-  const configBtn = IS_ADMIN ? `<button class="btn btn-sm" onclick="openBoardConfig()">⚙︎ Board</button>` : "";
+  const configBtn = IS_ADMIN ? `<button class="btn btn-sm" onclick="openBoardConfig()">${glyph("gear")} Board</button>` : "";
   if (!amIBoard()) { wrap.innerHTML = configBtn; return; }
   const hasRuleBtn = fundsList.length ? `<button class="btn btn-sm" onclick="openAllocRulesModal()">Allocation Rules</button>` : "";
   wrap.innerHTML = `
