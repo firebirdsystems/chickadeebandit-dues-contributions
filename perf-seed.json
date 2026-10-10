@@ -1,0 +1,1197 @@
+{
+ "groups": [
+  {
+   "key": "board",
+   "name": "Board of Directors",
+   "members": [
+    "{{me}}",
+    "{{partner}}"
+   ]
+  }
+ ],
+ "seed": [
+  {
+   "sql": "INSERT INTO app_dues_contributions__settings (key, value) VALUES (?, ?)",
+   "params": [
+    "board_group_id",
+    "{{group:board}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-16 days'))",
+   "params": [
+    "perf-period-01",
+    "October dues",
+    "{{date:12}}",
+    18500,
+    "open",
+    "[]",
+    "[]",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:11:00Z','now','-1 days'), ?, ?)",
+   "params": [
+    "perf-pay-001",
+    "perf-period-01",
+    "{{me}}",
+    18500,
+    "{{date:-1}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-46 days'))",
+   "params": [
+    "perf-period-02",
+    "September dues",
+    "{{date:-18}}",
+    18500,
+    "open",
+    "[]",
+    "[]",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:12:00Z','now','-23 days'), ?, ?)",
+   "params": [
+    "perf-pay-002",
+    "perf-period-02",
+    "{{me}}",
+    18500,
+    "{{date:-23}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:13:00Z','now','-16 days'), ?, ?)",
+   "params": [
+    "perf-pay-003",
+    "perf-period-02",
+    "{{partner}}",
+    9000,
+    "{{date:-16}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-60 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-76 days'))",
+   "params": [
+    "perf-period-03",
+    "August dues",
+    "{{date:-48}}",
+    18500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":55500,\"totalCollectedCents\":55500,\"overdueMembers\":[]}",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:14:00Z','now','-54 days'), ?, ?)",
+   "params": [
+    "perf-pay-004",
+    "perf-period-03",
+    "{{me}}",
+    18500,
+    "{{date:-54}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:15:00Z','now','-50 days'), ?, ?)",
+   "params": [
+    "perf-pay-005",
+    "perf-period-03",
+    "{{partner}}",
+    18500,
+    "{{date:-50}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:16:00Z','now','-47 days'), ?, ?)",
+   "params": [
+    "perf-pay-006",
+    "perf-period-03",
+    "{{adult2}}",
+    18500,
+    "{{date:-47}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-90 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-106 days'))",
+   "params": [
+    "perf-period-04",
+    "July dues",
+    "{{date:-78}}",
+    18500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":55500,\"totalCollectedCents\":47000,\"overdueMembers\":[{\"name\":\"Perf Neighbour\",\"balanceCents\":8500}]}",
+    "{{me}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:17:00Z','now','-84 days'), ?, ?)",
+   "params": [
+    "perf-pay-007",
+    "perf-period-04",
+    "{{me}}",
+    18500,
+    "{{date:-84}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:18:00Z','now','-88 days'), ?, ?)",
+   "params": [
+    "perf-pay-008",
+    "perf-period-04",
+    "{{partner}}",
+    9000,
+    "{{date:-88}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:19:00Z','now','-79 days'), ?, ?)",
+   "params": [
+    "perf-pay-009",
+    "perf-period-04",
+    "{{partner}}",
+    9500,
+    "{{date:-79}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:20:00Z','now','-75 days'), ?, ?)",
+   "params": [
+    "perf-pay-010",
+    "perf-period-04",
+    "{{adult2}}",
+    10000,
+    "{{date:-75}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-120 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-136 days'))",
+   "params": [
+    "perf-period-05",
+    "June dues",
+    "{{date:-108}}",
+    18500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":55500,\"totalCollectedCents\":55500,\"overdueMembers\":[]}",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:21:00Z','now','-114 days'), ?, ?)",
+   "params": [
+    "perf-pay-011",
+    "perf-period-05",
+    "{{me}}",
+    18500,
+    "{{date:-114}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:22:00Z','now','-110 days'), ?, ?)",
+   "params": [
+    "perf-pay-012",
+    "perf-period-05",
+    "{{partner}}",
+    18500,
+    "{{date:-110}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:23:00Z','now','-107 days'), ?, ?)",
+   "params": [
+    "perf-pay-013",
+    "perf-period-05",
+    "{{adult2}}",
+    18500,
+    "{{date:-107}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-150 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-166 days'))",
+   "params": [
+    "perf-period-06",
+    "May dues",
+    "{{date:-138}}",
+    18500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":55500,\"totalCollectedCents\":55500,\"overdueMembers\":[]}",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:24:00Z','now','-144 days'), ?, ?)",
+   "params": [
+    "perf-pay-014",
+    "perf-period-06",
+    "{{me}}",
+    18500,
+    "{{date:-144}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:25:00Z','now','-140 days'), ?, ?)",
+   "params": [
+    "perf-pay-015",
+    "perf-period-06",
+    "{{partner}}",
+    18500,
+    "{{date:-140}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:26:00Z','now','-141 days'), ?, ?)",
+   "params": [
+    "perf-pay-016",
+    "perf-period-06",
+    "{{adult2}}",
+    10000,
+    "{{date:-141}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:27:00Z','now','-132 days'), ?, ?)",
+   "params": [
+    "perf-pay-017",
+    "perf-period-06",
+    "{{adult2}}",
+    8500,
+    "{{date:-132}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-180 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-196 days'))",
+   "params": [
+    "perf-period-07",
+    "April dues",
+    "{{date:-168}}",
+    18500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":55500,\"totalCollectedCents\":55500,\"overdueMembers\":[]}",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:28:00Z','now','-174 days'), ?, ?)",
+   "params": [
+    "perf-pay-018",
+    "perf-period-07",
+    "{{me}}",
+    18500,
+    "{{date:-174}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:29:00Z','now','-178 days'), ?, ?)",
+   "params": [
+    "perf-pay-019",
+    "perf-period-07",
+    "{{partner}}",
+    9000,
+    "{{date:-178}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:30:00Z','now','-169 days'), ?, ?)",
+   "params": [
+    "perf-pay-020",
+    "perf-period-07",
+    "{{partner}}",
+    9500,
+    "{{date:-169}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:31:00Z','now','-167 days'), ?, ?)",
+   "params": [
+    "perf-pay-021",
+    "perf-period-07",
+    "{{adult2}}",
+    18500,
+    "{{date:-167}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-210 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-226 days'))",
+   "params": [
+    "perf-period-08",
+    "March dues",
+    "{{date:-198}}",
+    18500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":55500,\"totalCollectedCents\":55500,\"overdueMembers\":[]}",
+    "{{me}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:32:00Z','now','-204 days'), ?, ?)",
+   "params": [
+    "perf-pay-022",
+    "perf-period-08",
+    "{{me}}",
+    18500,
+    "{{date:-204}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:33:00Z','now','-200 days'), ?, ?)",
+   "params": [
+    "perf-pay-023",
+    "perf-period-08",
+    "{{partner}}",
+    18500,
+    "{{date:-200}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:34:00Z','now','-197 days'), ?, ?)",
+   "params": [
+    "perf-pay-024",
+    "perf-period-08",
+    "{{adult2}}",
+    18500,
+    "{{date:-197}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-240 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-256 days'))",
+   "params": [
+    "perf-period-09",
+    "February dues",
+    "{{date:-228}}",
+    18500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":55500,\"totalCollectedCents\":47000,\"overdueMembers\":[{\"name\":\"Perf Neighbour\",\"balanceCents\":8500}]}",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:35:00Z','now','-234 days'), ?, ?)",
+   "params": [
+    "perf-pay-025",
+    "perf-period-09",
+    "{{me}}",
+    18500,
+    "{{date:-234}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:36:00Z','now','-230 days'), ?, ?)",
+   "params": [
+    "perf-pay-026",
+    "perf-period-09",
+    "{{partner}}",
+    18500,
+    "{{date:-230}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:37:00Z','now','-225 days'), ?, ?)",
+   "params": [
+    "perf-pay-027",
+    "perf-period-09",
+    "{{adult2}}",
+    10000,
+    "{{date:-225}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-270 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-286 days'))",
+   "params": [
+    "perf-period-10",
+    "January dues",
+    "{{date:-258}}",
+    18500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":55500,\"totalCollectedCents\":55500,\"overdueMembers\":[]}",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:38:00Z','now','-264 days'), ?, ?)",
+   "params": [
+    "perf-pay-028",
+    "perf-period-10",
+    "{{me}}",
+    18500,
+    "{{date:-264}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:39:00Z','now','-268 days'), ?, ?)",
+   "params": [
+    "perf-pay-029",
+    "perf-period-10",
+    "{{partner}}",
+    9000,
+    "{{date:-268}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:40:00Z','now','-259 days'), ?, ?)",
+   "params": [
+    "perf-pay-030",
+    "perf-period-10",
+    "{{partner}}",
+    9500,
+    "{{date:-259}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:41:00Z','now','-261 days'), ?, ?)",
+   "params": [
+    "perf-pay-031",
+    "perf-period-10",
+    "{{adult2}}",
+    10000,
+    "{{date:-261}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:42:00Z','now','-252 days'), ?, ?)",
+   "params": [
+    "perf-pay-032",
+    "perf-period-10",
+    "{{adult2}}",
+    8500,
+    "{{date:-252}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-300 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-316 days'))",
+   "params": [
+    "perf-period-11",
+    "December dues",
+    "{{date:-288}}",
+    17500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":52500,\"totalCollectedCents\":52500,\"overdueMembers\":[]}",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:43:00Z','now','-294 days'), ?, ?)",
+   "params": [
+    "perf-pay-033",
+    "perf-period-11",
+    "{{me}}",
+    17500,
+    "{{date:-294}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:44:00Z','now','-290 days'), ?, ?)",
+   "params": [
+    "perf-pay-034",
+    "perf-period-11",
+    "{{partner}}",
+    17500,
+    "{{date:-290}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:45:00Z','now','-287 days'), ?, ?)",
+   "params": [
+    "perf-pay-035",
+    "perf-period-11",
+    "{{adult2}}",
+    17500,
+    "{{date:-287}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-330 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-346 days'))",
+   "params": [
+    "perf-period-12",
+    "November dues",
+    "{{date:-318}}",
+    17500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":52500,\"totalCollectedCents\":52500,\"overdueMembers\":[]}",
+    "{{me}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:46:00Z','now','-324 days'), ?, ?)",
+   "params": [
+    "perf-pay-036",
+    "perf-period-12",
+    "{{me}}",
+    17500,
+    "{{date:-324}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:47:00Z','now','-320 days'), ?, ?)",
+   "params": [
+    "perf-pay-037",
+    "perf-period-12",
+    "{{partner}}",
+    17500,
+    "{{date:-320}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:48:00Z','now','-317 days'), ?, ?)",
+   "params": [
+    "perf-pay-038",
+    "perf-period-12",
+    "{{adult2}}",
+    17500,
+    "{{date:-317}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-360 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-376 days'))",
+   "params": [
+    "perf-period-13",
+    "October dues (prior year)",
+    "{{date:-348}}",
+    17500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":52500,\"totalCollectedCents\":52500,\"overdueMembers\":[]}",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:49:00Z','now','-354 days'), ?, ?)",
+   "params": [
+    "perf-pay-039",
+    "perf-period-13",
+    "{{me}}",
+    17500,
+    "{{date:-354}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:50:00Z','now','-358 days'), ?, ?)",
+   "params": [
+    "perf-pay-040",
+    "perf-period-13",
+    "{{partner}}",
+    9000,
+    "{{date:-358}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:51:00Z','now','-349 days'), ?, ?)",
+   "params": [
+    "perf-pay-041",
+    "perf-period-13",
+    "{{partner}}",
+    8500,
+    "{{date:-349}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:52:00Z','now','-347 days'), ?, ?)",
+   "params": [
+    "perf-pay-042",
+    "perf-period-13",
+    "{{adult2}}",
+    17500,
+    "{{date:-347}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-390 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-406 days'))",
+   "params": [
+    "perf-period-14",
+    "September dues (prior year)",
+    "{{date:-378}}",
+    17500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":52500,\"totalCollectedCents\":44000,\"overdueMembers\":[{\"name\":\"Perf Neighbour\",\"balanceCents\":8500}]}",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:53:00Z','now','-384 days'), ?, ?)",
+   "params": [
+    "perf-pay-043",
+    "perf-period-14",
+    "{{me}}",
+    17500,
+    "{{date:-384}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:54:00Z','now','-380 days'), ?, ?)",
+   "params": [
+    "perf-pay-044",
+    "perf-period-14",
+    "{{partner}}",
+    17500,
+    "{{date:-380}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:10:00Z','now','-375 days'), ?, ?)",
+   "params": [
+    "perf-pay-045",
+    "perf-period-14",
+    "{{adult2}}",
+    9000,
+    "{{date:-375}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-420 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-436 days'))",
+   "params": [
+    "perf-period-15",
+    "August dues (prior year)",
+    "{{date:-408}}",
+    17500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":52500,\"totalCollectedCents\":52500,\"overdueMembers\":[]}",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:11:00Z','now','-414 days'), ?, ?)",
+   "params": [
+    "perf-pay-046",
+    "perf-period-15",
+    "{{me}}",
+    17500,
+    "{{date:-414}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:12:00Z','now','-410 days'), ?, ?)",
+   "params": [
+    "perf-pay-047",
+    "perf-period-15",
+    "{{partner}}",
+    17500,
+    "{{date:-410}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:13:00Z','now','-407 days'), ?, ?)",
+   "params": [
+    "perf-pay-048",
+    "perf-period-15",
+    "{{adult2}}",
+    17500,
+    "{{date:-407}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__periods (id, label, due_date, amount_due_cents, status, allocation_rules, skipped_member_ids, reconciliation, closed_at, closed_by_id, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-450 days'), ?, ?, ?, strftime('%Y-%m-%dT09:00:00Z','now','-466 days'))",
+   "params": [
+    "perf-period-16",
+    "July dues (prior year)",
+    "{{date:-438}}",
+    17500,
+    "locked",
+    "[]",
+    "[]",
+    "{\"totalExpectedCents\":52500,\"totalCollectedCents\":52500,\"overdueMembers\":[]}",
+    "{{me}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:14:00Z','now','-444 days'), ?, ?)",
+   "params": [
+    "perf-pay-049",
+    "perf-period-16",
+    "{{me}}",
+    17500,
+    "{{date:-444}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:15:00Z','now','-448 days'), ?, ?)",
+   "params": [
+    "perf-pay-050",
+    "perf-period-16",
+    "{{partner}}",
+    9000,
+    "{{date:-448}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:16:00Z','now','-439 days'), ?, ?)",
+   "params": [
+    "perf-pay-051",
+    "perf-period-16",
+    "{{partner}}",
+    8500,
+    "{{date:-439}}",
+    "[]",
+    "posted",
+    "{{partner}}",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__payments (id, period_id, member_id, amount_cents, date, allocation_rules, posting_status, recorded_by_id, recorded_at, visibility, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT17:17:00Z','now','-437 days'), ?, ?)",
+   "params": [
+    "perf-pay-052",
+    "perf-period-16",
+    "{{adult2}}",
+    17500,
+    "{{date:-437}}",
+    "[]",
+    "posted",
+    "{{me}}",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','-5 days'))",
+   "params": [
+    "perf-assess-01",
+    "Roof reserve special assessment",
+    45000,
+    "{{date:40}}",
+    "[\"all\"]",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','+30 days'))",
+   "params": [
+    "perf-assess-02",
+    "Pool resurfacing",
+    22000,
+    "{{date:75}}",
+    "[\"all\"]",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','-45 days'))",
+   "params": [
+    "perf-assess-03",
+    "Storm drain repair",
+    9500,
+    "{{date:0}}",
+    "[\"all\"]",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','-60 days'))",
+   "params": [
+    "perf-assess-04",
+    "Gate motor replacement",
+    6000,
+    "{{date:-15}}",
+    "[\"all\"]",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','-93 days'))",
+   "params": [
+    "perf-assess-05",
+    "Clubhouse furniture refresh",
+    4000,
+    "{{date:-48}}",
+    "[\"all\"]",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','-125 days'))",
+   "params": [
+    "perf-assess-06",
+    "Tree removal after windstorm",
+    7500,
+    "{{date:-80}}",
+    "[\"all\"]",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','-165 days'))",
+   "params": [
+    "perf-assess-07",
+    "Playground safety surfacing",
+    12000,
+    "{{date:-120}}",
+    "[\"all\"]",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','-205 days'))",
+   "params": [
+    "perf-assess-08",
+    "Mailbox cluster replacement",
+    3500,
+    "{{date:-160}}",
+    "[\"all\"]",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','-245 days'))",
+   "params": [
+    "perf-assess-09",
+    "Perimeter fence repainting",
+    8000,
+    "{{date:-200}}",
+    "[\"all\"]",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','-285 days'))",
+   "params": [
+    "perf-assess-10",
+    "Legal fees: easement dispute",
+    5000,
+    "{{date:-240}}",
+    "[\"all\"]",
+    "everyone",
+    "{{me}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','-320 days'))",
+   "params": [
+    "perf-assess-11",
+    "Snow removal overage",
+    2500,
+    "{{date:-275}}",
+    "[\"all\"]",
+    "everyone",
+    "{{partner}}"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT11:00:00Z','now','-365 days'))",
+   "params": [
+    "perf-assess-12",
+    "Entry sign and lighting",
+    6500,
+    "{{date:-320}}",
+    "[\"all\"]",
+    "everyone",
+    "{{me}}"
+   ]
+  }
+ ]
+}
