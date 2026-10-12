@@ -370,6 +370,11 @@ async function db(sql, params = []) {
   return json;
 }
 
+// An error whose message the app wrote for the user is marked `forUser`;
+// anything else (the hub's own text) is replaced by the caller's fixed line.
+function userError(message) { return Object.assign(new Error(message), { forUser: true }); }
+function failText(e, line) { return e?.forUser ? e.message : line; }
+
 // Best-effort: the finance endpoint has already committed, so a failed publish
 // must never surface as a failed write.
 async function publishEvent(type, subjectId, payload = {}) {
@@ -442,7 +447,13 @@ async function finance(resource, payload) {
     body: JSON.stringify(payload),
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error ?? `Finance error ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(body.error ?? `Finance error ${res.status}`);
+    // A 409 is the ledger refusing for a stated reason the board can act on
+    // (closed period, payments still attached, postings pending): shown as is.
+    if (res.status === 409 && typeof body.error === "string") err.forUser = true;
+    throw err;
+  }
   return body;
 }
 
@@ -733,7 +744,7 @@ window.saveBoardConfig = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save"; }
-    hubAlert(e.message ?? "Save failed");
+    console.error(e); hubAlert(failText(e, "Couldn’t save the board group — try again."));
   }
 };
 
@@ -948,7 +959,7 @@ window.submitNewPeriod = async function() {
     await announcePeriodDueDate(created);
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Create Period"; }
-    hubAlert(e.message ?? "Create failed");
+    console.error(e); hubAlert(failText(e, "Couldn’t create the period — try again."));
   }
 };
 
@@ -1010,7 +1021,7 @@ window.submitEditPeriod = async function() {
     }
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save"; }
-    hubAlert(e.message ?? "Save failed");
+    console.error(e); hubAlert(failText(e, "Couldn’t save the period — try again."));
   }
 };
 
@@ -1038,7 +1049,7 @@ window.deletePeriod = async function() {
     // A deleted period's calendar entry would otherwise stand forever naming a
     // deadline nothing is behind. Only when it had one to take down.
     if (wantsDueDateEntry(period)) await retractPeriodDueDate(period, "deleted");
-  } catch (e) { hubAlert(e.message ?? "Delete failed"); }
+  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t delete the period — try again.")); }
 };
 
 window.closePeriod = async function() {
@@ -1073,7 +1084,7 @@ window.closePeriod = async function() {
       closed_at: result.closed_at,
     });
     openReconModal(period);
-  } catch (e) { hubAlert(e.message ?? "Close failed"); }
+  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t close the period — try again.")); }
 };
 
 window.toggleMemberSkipped = async function(memberId) {
@@ -1091,7 +1102,7 @@ window.toggleMemberSkipped = async function(memberId) {
     _statsCache = { key: null, stats: null };
     render();
   } catch (e) {
-    hubAlert(e.message ?? "Update failed");
+    console.error(e); hubAlert(failText(e, "Couldn’t update the member — try again."));
   }
 };
 
@@ -1188,7 +1199,7 @@ window.submitPayment = async function(memberId) {
     if (result.warning) hubAlert(result.warning);
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Record Payment"; }
-    hubAlert(e.message ?? "Record failed");
+    console.error(e); hubAlert(failText(e, "Couldn’t record the payment — try again."));
   }
 };
 
@@ -1214,7 +1225,7 @@ window.deletePayment = async function(paymentId) {
     } else {
       render();
     }
-  } catch (e) { hubAlert(e.message ?? "Delete failed"); }
+  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t delete the payment — try again.")); }
 };
 
 async function retryPendingPayments() {
@@ -1313,7 +1324,7 @@ window.saveAllocRules = async function() {
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   try {
     const rules = (window._workingRules ?? []).filter(r => r.fundId && r.basisPoints > 0);
-    if (rules.length && allocTotal(rules) !== 100) throw new Error("Allocation rules must total exactly 100%");
+    if (rules.length && allocTotal(rules) !== 100) throw userError("Allocation rules must total exactly 100%");
     const result = await finance("periods", {
       action: "set_allocations", id: period.id,
       allocation_rules: rules.map(r => ({ fund_id: r.fundId, basis_points: r.basisPoints })),
@@ -1325,7 +1336,7 @@ window.saveAllocRules = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save Rules"; }
-    hubAlert(e.message ?? "Save failed");
+    console.error(e); hubAlert(failText(e, "Couldn’t save the allocation rules — try again."));
   }
 };
 
@@ -1400,7 +1411,7 @@ window.submitNewAssessment = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Create"; }
-    hubAlert(e.message ?? "Create failed");
+    console.error(e); hubAlert(failText(e, "Couldn’t create the assessment — try again."));
   }
 };
 
@@ -1411,10 +1422,10 @@ window.deleteAssessment = async function(id) {
   if (!ok) return;
   try {
     const { changed } = await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
-    if (changed === 0) throw new Error("This assessment could not be deleted.");
+    if (changed === 0) throw userError("This assessment could not be deleted.");
     data.assessments = data.assessments.filter(x => x.id !== id);
     render();
-  } catch (e) { hubAlert(e.message ?? "Delete failed"); }
+  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t delete the assessment — try again.")); }
 };
 
 window.deleteAssessmentInModal = async function(id) {
@@ -1424,10 +1435,10 @@ window.deleteAssessmentInModal = async function(id) {
   if (!ok) return;
   try {
     const { changed } = await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
-    if (changed === 0) throw new Error("This assessment could not be deleted.");
+    if (changed === 0) throw userError("This assessment could not be deleted.");
     data.assessments = data.assessments.filter(x => x.id !== id);
     renderAssessmentsModal();
-  } catch (e) { hubAlert(e.message ?? "Delete failed"); }
+  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t delete the assessment — try again.")); }
 };
 
 // ── Deep link ──────────────────────────────────────────────────────────────
