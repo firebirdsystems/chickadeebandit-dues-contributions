@@ -164,6 +164,8 @@
 
     /* ── Empty state ── */
     .empty { text-align: center; padding: 36px 20px; color: var(--hub-text-muted, #6b7280); font-size: 0.85rem; }
+    .load-error { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: var(--hub-tint-danger, #fee2e2); color: var(--hub-tint-danger-fg, #b91c1c); font-size: 0.9rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    .load-error-retry { background: none; border: 1px solid currentColor; border-radius: 8px; padding: 5px 10px; font: inherit; font-weight: 600; color: inherit; cursor: pointer; flex-shrink: 0; }
 
     /* ── Allocation rules ── */
     .alloc-row {
@@ -363,12 +365,9 @@ async function db(sql, params = []) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sql, params }),
   });
-  if (!res.ok) {
-    let msg = `DB error ${res.status}`;
-    try { msg = (await res.json()).error ?? msg; } catch {}
-    throw new Error(msg);
-  }
-  return res.json();
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || "Couldn’t reach the hub. Try again.");
+  return json;
 }
 
 // Best-effort: the finance endpoint has already committed, so a failed publish
@@ -550,22 +549,22 @@ async function loadData() {
 
 async function loadMembers() {
   if (!CONTEXT) { members = getDemoMembers(); return; }
-  try {
-    const res = await fetch(`${CONTEXT}?keys=family.members,family.groups`);
-    const ctx = await res.json();
-    members = ctx["family.members"] ?? [];
-    groups  = ctx["family.groups"] ?? [];
-  } catch { members = []; groups = []; }
+  const res = await fetch(`${CONTEXT}?keys=family.members,family.groups`);
+  const ctx = await res.json().catch(() => null);
+  if (!res.ok || !ctx || typeof ctx !== "object" || ctx.$errors?.length) throw new Error("Couldn’t reach the hub. Try again.");
+  members = ctx["family.members"] ?? [];
+  groups  = ctx["family.groups"] ?? [];
 }
 
 async function loadFundsList() {
   if (!CONTEXT) { fundsList = getDemoFunds(); return; }
-  try {
-    const res = await fetch(`${CONTEXT}?keys=app.${RESERVE_APP_ID}.funds-list`);
-    const parsed = await res.json();
-    const raw = parsed[`app.${RESERVE_APP_ID}.funds-list`];
-    fundsList = raw ? (raw.items ?? []) : [];
-  } catch { fundsList = []; }
+  // A household without the reserve app is answered 200 with the key left out:
+  // that is "no funds". A failed read is not, and throws.
+  const res = await fetch(`${CONTEXT}?keys=app.${RESERVE_APP_ID}.funds-list`);
+  const parsed = await res.json().catch(() => null);
+  if (!res.ok || !parsed || typeof parsed !== "object" || parsed.$errors?.length) throw new Error("Couldn’t reach the hub. Try again.");
+  const raw = parsed[`app.${RESERVE_APP_ID}.funds-list`];
+  fundsList = raw ? (raw.items ?? []) : [];
 }
 
 // ── Demo data ──────────────────────────────────────────────────────────────
@@ -1411,7 +1410,8 @@ window.deleteAssessment = async function(id) {
   const ok = await hubConfirm({ message: `Delete assessment "${a.label}"?`, destructive: true });
   if (!ok) return;
   try {
-    await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
+    const { changed } = await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
+    if (changed === 0) throw new Error("This assessment could not be deleted.");
     data.assessments = data.assessments.filter(x => x.id !== id);
     render();
   } catch (e) { hubAlert(e.message ?? "Delete failed"); }
@@ -1423,7 +1423,8 @@ window.deleteAssessmentInModal = async function(id) {
   const ok = await hubConfirm({ message: `Delete assessment "${a.label}"?`, destructive: true });
   if (!ok) return;
   try {
-    await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
+    const { changed } = await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
+    if (changed === 0) throw new Error("This assessment could not be deleted.");
     data.assessments = data.assessments.filter(x => x.id !== id);
     renderAssessmentsModal();
   } catch (e) { hubAlert(e.message ?? "Delete failed"); }
@@ -1440,8 +1441,16 @@ function handleDeepLink() {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
-(async () => {
-  await Promise.all([loadMembers(), loadData(), loadFundsList()]);
+async function firstLoad() {
+  try {
+    await Promise.all([loadMembers(), loadData(), loadFundsList()]);
+  } catch {
+    // Nothing was read, so there is no period to draw: say so in its place.
+    document.getElementById("period-select").innerHTML = `<option value="">&#x2014;</option>`;
+    document.getElementById("main-content").innerHTML =
+      `<div class="load-error" data-testid="load-error" role="alert"><span>Couldn’t load dues.</span> <button type="button" class="load-error-retry" data-testid="load-retry">Try again</button></div>`;
+    return;
+  }
   rebuildIndexes();
   if (data.periods.length) {
     selectedPeriodId = [...data.periods]
@@ -1451,7 +1460,11 @@ function handleDeepLink() {
   handleDeepLink();
   await retryPendingPayments();
   render();
-})();
+}
+document.addEventListener("click", (e) => {
+  if (e.target.closest('[data-testid="load-retry"]')) firstLoad();
+});
+firstLoad();
 </script>
 </body>
 </html>
