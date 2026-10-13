@@ -994,12 +994,12 @@ window.submitEditPeriod = async function() {
   const amountCents = toCents(document.getElementById("f-amount").value);
   const due    = document.getElementById("f-due").value;
   if (!label) { document.getElementById("f-label").focus(); return; }
+  const period = data.periods.find(p => p.id === selectedPeriodId);
+  if (!period) { closeModal(); hubAlert("That period is no longer there."); return; }
 
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   try {
-    const period = data.periods.find(p => p.id === selectedPeriodId);
-    if (!period) return;
     const newAmountCents = Number.isInteger(amountCents) ? amountCents : period.amountDueCents;
     const prev = { ...period };
     await finance("periods", {
@@ -1167,12 +1167,11 @@ window.submitPayment = async function(memberId) {
   const date   = document.getElementById("f-pay-date").value;
   if (!Number.isInteger(amountCents) || amountCents <= 0) { document.getElementById("f-pay-amount").focus(); return; }
   if (!date) { document.getElementById("f-pay-date").focus(); return; }
+  const period = data.periods.find(p => p.id === selectedPeriodId);
+  if (!period) { closeModal(); hubAlert("That period is no longer there."); return; }
 
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
-
-  const period = data.periods.find(p => p.id === selectedPeriodId);
-  if (!period) return;
 
   try {
     const payment = {
