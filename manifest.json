@@ -41,7 +41,6 @@
     ]
   },
   "kiosk": "never",
-  "resource_limits": { "max_db_bytes": 104857600 },
   "nav": { "label": "Dues" },
   "publishes": [
     "dues.payment_recorded",
