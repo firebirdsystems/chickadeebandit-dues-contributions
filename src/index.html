@@ -984,17 +984,19 @@ window.openEditPeriodModal = function() {
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitEditPeriod()">Save</button>
+      <button class="btn btn-primary" onclick="submitEditPeriod('${esc(period.id)}')">Save</button>
     </div>
   `);
 };
 
-window.submitEditPeriod = async function() {
+// `periodId` is the period the dialog was opened for: the period picker stays
+// reachable behind the dialog, so the selection can move before Save.
+window.submitEditPeriod = async function(periodId) {
   const label  = document.getElementById("f-label").value.trim();
   const amountCents = toCents(document.getElementById("f-amount").value);
   const due    = document.getElementById("f-due").value;
   if (!label) { document.getElementById("f-label").focus(); return; }
-  const period = data.periods.find(p => p.id === selectedPeriodId);
+  const period = data.periods.find(p => p.id === periodId);
   if (!period) { closeModal(); hubAlert("That period is no longer there."); return; }
 
   const btn = modalEl?.querySelector(".btn-primary");
@@ -1156,18 +1158,19 @@ window.openRecordPaymentModal = function(memberId) {
       : `<div class="form-hint" style="margin-bottom:10px">This payment will be immediately posted to ${period.allocationRules.length} reserve fund(s) per allocation rules.</div>`}
     <div class="modal-actions">
       <button class="btn" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitPayment('${esc(memberId)}')">Record Payment</button>
+      <button class="btn btn-primary" onclick="submitPayment('${esc(memberId)}', '${esc(period.id)}')">Record Payment</button>
     </div>
   `);
   setTimeout(() => document.getElementById("f-pay-amount")?.select(), 50);
 };
 
-window.submitPayment = async function(memberId) {
+// `periodId` is the period the dialog was opened for, not the current selection.
+window.submitPayment = async function(memberId, periodId) {
   const amountCents = toCents(document.getElementById("f-pay-amount").value);
   const date   = document.getElementById("f-pay-date").value;
   if (!Number.isInteger(amountCents) || amountCents <= 0) { document.getElementById("f-pay-amount").focus(); return; }
   if (!date) { document.getElementById("f-pay-date").focus(); return; }
-  const period = data.periods.find(p => p.id === selectedPeriodId);
+  const period = data.periods.find(p => p.id === periodId);
   if (!period) { closeModal(); hubAlert("That period is no longer there."); return; }
 
   const btn = modalEl?.querySelector(".btn-primary");
@@ -1175,7 +1178,7 @@ window.submitPayment = async function(memberId) {
 
   try {
     const payment = {
-      id: crypto.randomUUID(), memberId, periodId: selectedPeriodId,
+      id: crypto.randomUUID(), memberId, periodId: period.id,
       amountCents, date, postingStatus: "pending", recordedAt: new Date().toISOString(),
     };
     const result = await finance("payments", {
@@ -1187,7 +1190,8 @@ window.submitPayment = async function(memberId) {
     data.payments.push(payment);
     addPaymentToIndex(payment);
     closeModal();
-    patchAfterPayment(memberId, period);
+    if (period.id === selectedPeriodId) patchAfterPayment(memberId, period);
+    else render();
     await publishEvent("dues.payment_recorded", payment.id, {
       period_id: payment.periodId,
       period_label: period.label,
