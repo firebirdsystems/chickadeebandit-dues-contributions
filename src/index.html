@@ -456,6 +456,35 @@ async function finance(resource, payload) {
   return body;
 }
 
+// A period write the finance endpoint answered 404 or 409 (closed or closing
+// elsewhere, or deleted): read the period again so the line says which, and so
+// the screen shows it as stored. Answers `found` for failureLine: false = gone,
+// true = still there (its new state taken), null = the re-read failed.
+async function rereadPeriod(periodId) {
+  let row;
+  try {
+    row = (await db("SELECT * FROM app_dues_contributions__periods WHERE id = ?", [periodId])).rows?.[0] ?? null;
+  } catch (e) { console.error(e); return null; }
+  try {
+    if (!row) {
+      data.periods = data.periods.filter(p => p.id !== periodId);
+    } else {
+      const period = data.periods.find(p => p.id === periodId);
+      if (period) Object.assign(period, {
+        label: row.label, dueDate: row.due_date ?? null, amountDueCents: row.amount_due_cents ?? 0,
+        status: row.status ?? "open",
+        allocationRules: safeParse(row.allocation_rules, []),
+        skippedMemberIds: safeParse(row.skipped_member_ids, []),
+        reconciliation: safeParse(row.reconciliation, null),
+        closedAt: row.closed_at ?? null, closedById: row.closed_by_id ?? null,
+      });
+    }
+    _statsCache = { key: null, stats: null };
+    render();
+  } catch (e) { console.error(e); }
+  return !!row;
+}
+
 // ── Indexes (rebuilt once after load; updated incrementally on mutations) ──
 let membersMap            = new Map(); // id → member
 let paymentsByPeriod      = new Map(); // periodId → Payment[]
@@ -1037,7 +1066,9 @@ window.submitEditPeriod = async function(periodId) {
     });
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save"; }
-    console.error(e); hubAlert(failureLine(e, { action: "save the period", thing: "period" }));
+    console.error(e);
+    const found = e?.status === 404 || e?.status === 409 ? await rereadPeriod(period.id) : undefined;
+    hubAlert(failureLine(e, { action: "save the period", thing: "period", found, guarded: true }));
     return;
   }
   // The edit is stored: the redraw and the event sit outside the write's try
@@ -1150,10 +1181,13 @@ window.toggleMemberSkipped = async function(memberId) {
     });
     period.skippedMemberIds = result.skipped_member_ids ?? skippedMemberIds;
     _statsCache = { key: null, stats: null };
-    render();
   } catch (e) {
-    console.error(e); hubAlert(failureLine(e, { action: "update the member", thing: "period" }));
+    console.error(e);
+    const found = e?.status === 404 || e?.status === 409 ? await rereadPeriod(period.id) : undefined;
+    hubAlert(failureLine(e, { action: "update the member", thing: "period", found, guarded: true }));
+    return;
   }
+  try { render(); } catch (e) { console.error(e); }
 };
 
 function openReconModal(period) {
@@ -1447,12 +1481,25 @@ window.saveAllocRules = async function() {
     period.allocationRules = result.allocation_rules;
     window._workingRules = null;
     window._allocPeriodId = null;
-    closeModal();
-    render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save Rules"; }
-    console.error(e); hubAlert(failureLine(e, { action: "save the allocation rules", thing: "period" }));
+    console.error(e);
+    const found = e?.status === 404 || e?.status === 409 ? await rereadPeriod(period.id) : undefined;
+    // The hub checks the period first, so a 404 while the period is still
+    // there means the Reserve Fund app is missing or inactive.
+    if (e?.status === 404 && found === true) {
+      hubAlert("The Reserve Fund app isn’t available — check that it’s installed and active.");
+      return;
+    }
+    hubAlert(failureLine(e, { action: "save the allocation rules", thing: "period", found, guarded: true }));
+    return;
   }
+  // The rules are stored: the redraw sits outside the write's try so a
+  // failure in it is not reported as a failed save.
+  try {
+    closeModal();
+    render();
+  } catch (e) { console.error(e); }
 };
 
 // ── Assessments ────────────────────────────────────────────────────────────
