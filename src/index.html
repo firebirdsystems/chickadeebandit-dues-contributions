@@ -327,7 +327,7 @@ import {
   canManageDues as _canManageDues,
   safeParse, isDuesEligibleMember, allocTotal, memberDuesStatus,
   periodSourceRefId, wantsDueDateEntry, dueDateRetractionReason,
-  dueDateInputsChanged, periodReviewTitle, periodDueSummary,
+  dueDateInputsChanged, periodReviewTitle, periodDueSummary, failureLine, outcomeUnknown, paymentFailureLine,
 } from "./logic.js";
 
 const CONTEXT         = window.__CONTEXT_URL     ?? "";
@@ -366,14 +366,16 @@ async function db(sql, params = []) {
     body: JSON.stringify({ sql, params }),
   });
   const json = await res.json().catch(() => null);
-  if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || "Couldn’t reach the hub. Try again.");
+  // `status` and `code` ride on the error: failureLine() picks the line from them.
+  if (!res.ok || !json || typeof json !== "object" || json.error) {
+    throw Object.assign(new Error(json?.error || "Couldn’t reach the hub. Try again."), { status: res.status, code: json?.code });
+  }
   return json;
 }
 
 // An error whose message the app wrote for the user is marked `forUser`;
-// anything else (the hub's own text) is replaced by the caller's fixed line.
+// anything else (the hub's own text) is replaced by failureLine()'s line.
 function userError(message) { return Object.assign(new Error(message), { forUser: true }); }
-function failText(e, line) { return e?.forUser ? e.message : line; }
 
 // Best-effort: the finance endpoint has already committed, so a failed publish
 // must never surface as a failed write.
@@ -448,11 +450,8 @@ async function finance(resource, payload) {
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error(body.error ?? `Finance error ${res.status}`);
-    // A 409 is the ledger refusing for a stated reason the board can act on
-    // (closed period, payments still attached, postings pending): shown as is.
-    if (res.status === 409 && typeof body.error === "string") err.forUser = true;
-    throw err;
+    // The status picks the line (failureLine); the hub's text only goes to the console.
+    throw Object.assign(new Error(body.error ?? `Finance error ${res.status}`), { status: res.status });
   }
   return body;
 }
@@ -738,13 +737,13 @@ window.saveBoardConfig = async function() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key: "board_group_id", value: groupId }),
     });
-    if (!res.ok) { let m = "Save failed"; try { m = (await res.json()).error ?? m; } catch {} throw new Error(m); }
+    if (!res.ok) { let m = "Save failed"; try { m = (await res.json()).error ?? m; } catch {} throw Object.assign(new Error(m), { status: res.status }); }
     boardGroupId = groupId;
     closeModal();
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save"; }
-    console.error(e); hubAlert(failText(e, "Couldn’t save the board group — try again."));
+    console.error(e); hubAlert(failureLine(e, { action: "save the board group", thing: "board group" }));
   }
 };
 
@@ -941,11 +940,15 @@ window.submitNewPeriod = async function() {
   if (!label)               { document.getElementById("f-label").focus(); return; }
   if (!Number.isInteger(amountCents) || amountCents < 0) { document.getElementById("f-amount").focus(); return; }
 
-  const btn = modalEl?.querySelector(".btn-primary");
+  const dialog = modalEl;
+  const btn = dialog?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Creating…"; }
+  // One id per dialog, sent on every attempt: a retry after a lost answer
+  // finds the first attempt instead of storing a second period.
+  const id = dialog ? (dialog._pendingId ??= crypto.randomUUID()) : crypto.randomUUID();
   let created;
+  let note = "";
   try {
-    const id = crypto.randomUUID();
     const result = await finance("periods", {
       action: "create", id, label, due_date: due || null, amount_due_cents: amountCents,
     });
@@ -954,15 +957,33 @@ window.submitNewPeriod = async function() {
       status: "open", allocationRules: [], skippedMemberIds: [], reconciliation: null, createdAt: result.created_at,
     };
   } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = "Create Period"; }
-    console.error(e); hubAlert(failText(e, "Couldn’t create the period — try again."));
-    return;
+    console.error(e);
+    let stored = null;
+    if (outcomeUnknown(e)) {
+      try { stored = (await db("SELECT * FROM app_dues_contributions__periods WHERE id = ?", [id])).rows?.[0] ?? null; }
+      catch (readErr) { console.error(readErr); }
+    }
+    if (!stored) {
+      if (btn) { btn.disabled = false; btn.textContent = "Create Period"; }
+      hubAlert(failureLine(e, { action: "create the period", thing: "period" }));
+      return;
+    }
+    // An earlier attempt landed: run the success path once, with what is stored.
+    created = {
+      id, label: stored.label, dueDate: stored.due_date ?? null, amountDueCents: stored.amount_due_cents ?? 0,
+      status: stored.status ?? "open", allocationRules: safeParse(stored.allocation_rules, []),
+      skippedMemberIds: safeParse(stored.skipped_member_ids, []), reconciliation: null, createdAt: stored.created_at,
+    };
+    if (created.label !== label || created.dueDate !== (due || null) || Number(created.amountDueCents) !== amountCents) {
+      note = "Saved as first entered — check it and update what changed.";
+    }
   }
   // The period is stored: the redraw and the event sit outside the write's try
   // so a failure in them is not reported as a failed create.
   data.periods.push(created);
   selectedPeriodId = created.id;
-  closeModal();
+  if (modalEl === dialog) closeModal();
+  if (note) hubAlert(note);
   try {
     render();
     await announcePeriodDueDate(created);
@@ -1003,7 +1024,7 @@ window.submitEditPeriod = async function(periodId) {
   const due    = document.getElementById("f-due").value;
   if (!label) { document.getElementById("f-label").focus(); return; }
   const period = data.periods.find(p => p.id === periodId);
-  if (!period) { closeModal(); hubAlert("That period is no longer there."); return; }
+  if (!period) { closeModal(); hubAlert("This period has been removed."); return; }
 
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
@@ -1016,7 +1037,7 @@ window.submitEditPeriod = async function(periodId) {
     });
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save"; }
-    console.error(e); hubAlert(failText(e, "Couldn’t save the period — try again."));
+    console.error(e); hubAlert(failureLine(e, { action: "save the period", thing: "period" }));
     return;
   }
   // The edit is stored: the redraw and the event sit outside the write's try
@@ -1055,7 +1076,7 @@ window.deletePeriod = async function() {
   const pid = selectedPeriodId;
   try {
     await finance("periods", { action: "delete", id: pid });
-  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t delete the period — try again.")); return; }
+  } catch (e) { console.error(e); hubAlert(failureLine(e, { action: "delete the period", thing: "period" })); return; }
   // The delete is stored: the redraw and the event sit outside the write's try
   // so a failure in them is not reported as a failed delete.
   data.periods  = data.periods.filter(p => p.id !== pid);
@@ -1086,14 +1107,21 @@ window.closePeriod = async function() {
   let result;
   try {
     result = await finance("periods", { action: "close", id: period.id });
-  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t close the period — try again.")); return; }
+  } catch (e) {
+    console.error(e);
+    // A 409 with payments still posting is the ledger waiting on them, not someone else's change.
+    const posting = e?.status === 409 && getPeriodPayments(period.id).some(p => p.postingStatus !== "posted");
+    hubAlert(posting ? "Some payments haven’t posted to the reserve funds yet — close the period once they have." : failureLine(e, { action: "close the period", thing: "period" }));
+    return;
+  }
   // The close is stored: the redraw, the event and the report sit outside the
   // write's try so a failure in them is not reported as a failed close.
   period.status = "locked";
   period.closedAt = result.closed_at;
   period.reconciliation = result.reconciliation;
+  // A redraw that throws must not also skip the reconciliation report.
+  try { render(); } catch (e) { console.error(e); }
   try {
-    render();
     // The source_ref_id is what makes this a retraction as well as a
     // notification: a closed period's due date is spent, and this is the same
     // ref `dues.period_opened` announced with, so the calendar rule can find
@@ -1124,7 +1152,7 @@ window.toggleMemberSkipped = async function(memberId) {
     _statsCache = { key: null, stats: null };
     render();
   } catch (e) {
-    console.error(e); hubAlert(failText(e, "Couldn’t update the member — try again."));
+    console.error(e); hubAlert(failureLine(e, { action: "update the member", thing: "period" }));
   }
 };
 
@@ -1191,32 +1219,56 @@ window.submitPayment = async function(memberId, periodId) {
   if (!Number.isInteger(amountCents) || amountCents <= 0) { document.getElementById("f-pay-amount").focus(); return; }
   if (!date) { document.getElementById("f-pay-date").focus(); return; }
   const period = data.periods.find(p => p.id === periodId);
-  if (!period) { closeModal(); hubAlert("That period is no longer there."); return; }
+  if (!period) { closeModal(); hubAlert("This period has been removed."); return; }
 
-  const btn = modalEl?.querySelector(".btn-primary");
+  const dialog = modalEl;
+  const btn = dialog?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
 
+  // One id per dialog, sent on every attempt: the hub answers a replay of the
+  // same payment as success, so a retry after a lost answer cannot record it twice.
   const payment = {
-    id: crypto.randomUUID(), memberId, periodId: period.id,
+    id: dialog ? (dialog._pendingId ??= crypto.randomUUID()) : crypto.randomUUID(), memberId, periodId: period.id,
     amountCents, date, postingStatus: "pending", recordedAt: new Date().toISOString(),
   };
   let result;
+  let note = "";
   try {
     result = await finance("payments", {
       action: "create", id: payment.id, period_id: payment.periodId,
       member_id: memberId, amount_cents: amountCents, date,
     });
   } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = "Record Payment"; }
-    console.error(e); hubAlert(failText(e, "Couldn’t record the payment — try again."));
-    return;
+    console.error(e);
+    // Unknown outcome, or a 409 (closed period, or this id already stored with
+    // the details first entered): read the payment back by its id.
+    let stored = null;
+    let readFailed = false;
+    if (outcomeUnknown(e) || e?.status === 409) {
+      try { stored = (await db("SELECT * FROM app_dues_contributions__payments WHERE id = ?", [payment.id])).rows?.[0] ?? null; }
+      catch (readErr) { console.error(readErr); readFailed = true; }
+    }
+    if (!stored) {
+      if (btn) { btn.disabled = false; btn.textContent = "Record Payment"; }
+      hubAlert(paymentFailureLine(e, { readFailed }));
+      return;
+    }
+    // An earlier attempt landed: run the success path once, with what is stored.
+    result = { posting_status: stored.posting_status, recorded_at: stored.recorded_at };
+    if (Number(stored.amount_cents) !== amountCents || stored.date !== date) {
+      payment.amountCents = Number(stored.amount_cents);
+      payment.date = stored.date;
+      // Payments have no edit screen: the fix is delete and record again.
+      note = "Saved as first entered — check it, and delete and record it again if it’s wrong.";
+    }
   }
   // The payment is stored: the redraw and the event sit outside the write's
   // try so a failure in them is not reported as a failed payment.
   payment.postingStatus = result.posting_status;
   payment.recordedAt = result.recorded_at;
   data.payments.push(payment);
-  closeModal();
+  if (modalEl === dialog) closeModal();
+  if (note) hubAlert(note);
   try {
     addPaymentToIndex(payment);
     if (period.id === selectedPeriodId) patchAfterPayment(memberId, period);
@@ -1225,11 +1277,12 @@ window.submitPayment = async function(memberId, periodId) {
       period_id: payment.periodId,
       period_label: period.label,
       member_id: memberId,
-      amount_cents: amountCents,
-      date,
+      amount_cents: payment.amountCents,
+      date: payment.date,
     });
   } catch (e) { console.error(e); }
-  if (result.warning) hubAlert(result.warning);
+  // The hub's warning text goes to the console; the page says it in its own words.
+  if (result.warning) { console.warn(result.warning); hubAlert("The payment was saved; posting it to the reserve funds is still pending."); }
 };
 
 window.deletePayment = async function(paymentId) {
@@ -1245,8 +1298,7 @@ window.deletePayment = async function(paymentId) {
     destructive: true,
   });
   if (!confirmed) return;
-  try {
-    await finance("payments", { action: "delete", id: paymentId });
+  const dropLocally = () => {
     data.payments = data.payments.filter(p => p.id !== paymentId);
     removePaymentFromIndex(paymentId, periodId, memberId);
     if (period && period.id === selectedPeriodId) {
@@ -1254,7 +1306,41 @@ window.deletePayment = async function(paymentId) {
     } else {
       render();
     }
-  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t delete the payment — try again.")); }
+  };
+  try {
+    await finance("payments", { action: "delete", id: paymentId });
+  } catch (e) {
+    console.error(e);
+    if (e?.status !== 404 && e?.status !== 409) {
+      hubAlert(failureLine(e, { action: "delete the payment", thing: "payment" }));
+      return;
+    }
+    // A 404 or 409 can also come from the reserve-fund ledger: decide from a re-read.
+    let row;
+    try {
+      row = (await db(
+        "SELECT d.status AS period_status FROM app_dues_contributions__payments p JOIN app_dues_contributions__periods d ON d.id = p.period_id WHERE p.id = ?",
+        [paymentId],
+      )).rows?.[0] ?? null;
+    } catch (readErr) {
+      console.error(readErr);
+      hubAlert("Couldn’t delete the payment — try again.");
+      return;
+    }
+    if (!row) {
+      try { dropLocally(); } catch (drawErr) { console.error(drawErr); }
+      hubAlert("This payment has been removed.");
+    } else if (row.period_status !== "open") {
+      if (period) period.status = row.period_status;
+      try { render(); } catch (drawErr) { console.error(drawErr); }
+      hubAlert("This period has been closed, so its payments can’t change.");
+    } else {
+      hubAlert("Couldn’t delete the payment — try again.");
+    }
+    return;
+  }
+  // The delete is stored: a redraw that throws is not a failed delete.
+  try { dropLocally(); } catch (e) { console.error(e); }
 };
 
 async function retryPendingPayments() {
@@ -1365,7 +1451,7 @@ window.saveAllocRules = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Save Rules"; }
-    console.error(e); hubAlert(failText(e, "Couldn’t save the allocation rules — try again."));
+    console.error(e); hubAlert(failureLine(e, { action: "save the allocation rules", thing: "period" }));
   }
 };
 
@@ -1426,22 +1512,45 @@ window.submitNewAssessment = async function() {
   if (!label)                { document.getElementById("f-ass-label").focus(); return; }
   if (!Number.isInteger(amountCents) || amountCents <= 0) { document.getElementById("f-ass-amount").focus(); return; }
 
-  const btn = modalEl?.querySelector(".btn-primary");
+  const dialog = modalEl;
+  const btn = dialog?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Creating…"; }
+  // One id per dialog, sent on every attempt: a retry after a lost answer
+  // finds the first attempt instead of storing a second assessment.
+  const id = dialog ? (dialog._pendingId ??= crypto.randomUUID()) : crypto.randomUUID();
+  let created = { id, label, amountCents, dueDate: due || null, memberIds: ["all"], createdAt: new Date().toISOString() };
+  let note = "";
   try {
-    const id = crypto.randomUUID();
-    const createdAt = new Date().toISOString();
     await db(
       "INSERT INTO app_dues_contributions__assessments (id, label, amount_cents, due_date, member_ids, visibility, created_by, created_at) VALUES (?,?,?,?,'[\"all\"]','everyone',?,?)",
-      [id, label, amountCents, due || null, "", createdAt],
+      [id, label, amountCents, due || null, "", created.createdAt],
     );
-    data.assessments.push({ id, label, amountCents, dueDate: due || null, memberIds: ["all"], createdAt });
-    closeModal();
-    render();
   } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = "Create"; }
-    console.error(e); hubAlert(failText(e, "Couldn’t create the assessment — try again."));
+    console.error(e);
+    let stored = null;
+    if (outcomeUnknown(e)) {
+      try { stored = (await db("SELECT * FROM app_dues_contributions__assessments WHERE id = ?", [id])).rows?.[0] ?? null; }
+      catch (readErr) { console.error(readErr); }
+    }
+    if (!stored) {
+      if (btn) { btn.disabled = false; btn.textContent = "Create"; }
+      hubAlert(failureLine(e, { action: "create the assessment", thing: "assessment" }));
+      return;
+    }
+    // An earlier attempt landed: run the success path once, with what is stored.
+    created = {
+      id, label: stored.label, amountCents: stored.amount_cents ?? 0, dueDate: stored.due_date ?? null,
+      memberIds: safeParse(stored.member_ids, ["all"]), createdAt: stored.created_at,
+    };
+    if (created.label !== label || Number(created.amountCents) !== amountCents || created.dueDate !== (due || null)) {
+      // Assessments have no edit screen: the fix is delete and record again.
+      note = "Saved as first entered — check it, and delete and record it again if it’s wrong.";
+    }
   }
+  data.assessments.push(created);
+  if (modalEl === dialog) closeModal();
+  try { render(); } catch (e) { console.error(e); }
+  if (note) hubAlert(note);
 };
 
 window.deleteAssessment = async function(id) {
@@ -1451,10 +1560,18 @@ window.deleteAssessment = async function(id) {
   if (!ok) return;
   try {
     const { changed } = await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
-    if (changed === 0) throw userError("This assessment could not be deleted.");
+    if (changed === 0) {
+      // Nothing deleted: gone already, or the row policy refused it.
+      let found = null; // null: the re-read failed, so say neither
+      try { found = (await db("SELECT id FROM app_dues_contributions__assessments WHERE id=?", [id])).rows.length > 0; }
+      catch (readErr) { console.error(readErr); }
+      if (found === false) { data.assessments = data.assessments.filter(x => x.id !== id); render(); }
+      hubAlert(failureLine(null, { action: "delete the assessment", thing: "assessment", found }));
+      return;
+    }
     data.assessments = data.assessments.filter(x => x.id !== id);
     render();
-  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t delete the assessment — try again.")); }
+  } catch (e) { console.error(e); hubAlert(failureLine(e, { action: "delete the assessment", thing: "assessment" })); }
 };
 
 window.deleteAssessmentInModal = async function(id) {
@@ -1464,10 +1581,18 @@ window.deleteAssessmentInModal = async function(id) {
   if (!ok) return;
   try {
     const { changed } = await db("DELETE FROM app_dues_contributions__assessments WHERE id=?", [id]);
-    if (changed === 0) throw userError("This assessment could not be deleted.");
+    if (changed === 0) {
+      // Nothing deleted: gone already, or the row policy refused it.
+      let found = null; // null: the re-read failed, so say neither
+      try { found = (await db("SELECT id FROM app_dues_contributions__assessments WHERE id=?", [id])).rows.length > 0; }
+      catch (readErr) { console.error(readErr); }
+      if (found === false) { data.assessments = data.assessments.filter(x => x.id !== id); renderAssessmentsModal(); }
+      hubAlert(failureLine(null, { action: "delete the assessment", thing: "assessment", found }));
+      return;
+    }
     data.assessments = data.assessments.filter(x => x.id !== id);
     renderAssessmentsModal();
-  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t delete the assessment — try again.")); }
+  } catch (e) { console.error(e); hubAlert(failureLine(e, { action: "delete the assessment", thing: "assessment" })); }
 };
 
 // ── Deep link ──────────────────────────────────────────────────────────────

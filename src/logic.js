@@ -191,3 +191,49 @@ export function periodReviewTitle(period) {
 export function periodDueSummary(period) {
   return `Dues for ${period?.label ?? "this period"} are due. Record contributions in Dues & Contributions.`;
 }
+
+/**
+ * "Retry after a lost response": a create whose outcome is unknown (no status,
+ * a 400, a 5xx other than 507) may have been stored, so the page reads the row
+ * back by its pinned id before showing anything.
+ */
+export function outcomeUnknown(e) {
+  if (e?.forUser) return false;
+  const s = e?.status;
+  return !s || s === 400 || (s >= 500 && s !== 507);
+}
+
+/**
+ * The line a payment create that did not land shows. `readFailed` is true when
+ * the read-back by the pinned id itself failed: the outcome is still unknown,
+ * so the page says to try again whatever the create answered. A 409 whose
+ * read-back found nothing means the period is closed; a 404 means the period
+ * is gone (the payment itself never existed).
+ */
+export function paymentFailureLine(e, { readFailed = false } = {}) {
+  if (readFailed) return "Couldn’t record the payment — try again.";
+  if (e?.status === 409) return "This period has been closed, so its payments can’t change.";
+  if (e?.status === 404) return "This period has been removed.";
+  return failureLine(e, { action: "record the payment", thing: "payment" });
+}
+
+/**
+ * The line a failed write shows ("Refused, gone, or failed" in the app-template
+ * guide): "try again" only when retrying can work. `action` and `thing` are the
+ * app's own words. `found` is the caller's re-read after a write that changed
+ * nothing: false = the row is gone, true = it is still there, null = the
+ * re-read failed (say neither removed nor changed). A row still there after a
+ * plain `WHERE id = ?` write means the row policy refused it; only a `guarded`
+ * write (one with a state condition) can have been "changed by someone else".
+ * Decided from the error's `status` / `code`, never from the hub's text.
+ */
+export function failureLine(e, { action, thing, found, guarded = false } = {}) {
+  if (e?.forUser) return e.message;
+  if (e?.code === "UNIQUE_CONSTRAINT" || /UNIQUE constraint failed/i.test(String(e?.message ?? ""))) return `That ${thing} already exists.`;
+  if (e?.status === 403 || (found === true && !guarded)) return `You don’t have permission to ${action}.`;
+  if (e?.status === 507) return "The household’s storage is full — free up space first.";
+  if (found === null) return `Couldn’t ${action} — try again.`;
+  if (found === false || (found === undefined && e?.status === 404)) return `This ${thing} has been removed.`;
+  if (found === true || e?.status === 409) return `This ${thing} was changed by someone else — check it first.`;
+  return `Couldn’t ${action} — try again.`;
+}
