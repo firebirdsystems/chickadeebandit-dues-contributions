@@ -988,13 +988,16 @@ window.submitNewPeriod = async function() {
   } catch (e) {
     console.error(e);
     let stored = null;
+    let readFailed = false;
     if (outcomeUnknown(e)) {
       try { stored = (await db("SELECT * FROM app_dues_contributions__periods WHERE id = ?", [id])).rows?.[0] ?? null; }
-      catch (readErr) { console.error(readErr); }
+      catch (readErr) { console.error(readErr); readFailed = true; }
     }
     if (!stored) {
       if (btn) { btn.disabled = false; btn.textContent = "Create Period"; }
-      hubAlert(failureLine(e, { action: "create the period", thing: "period" }));
+      // The id is ours: with the read-back failed, a UNIQUE answer may be this
+      // form's own first try, so nothing is known — "try again", not "already exists".
+      hubAlert(failureLine(readFailed ? null : e, { action: "create the period", thing: "period" }));
       return;
     }
     // An earlier attempt landed: run the success path once, with what is stored.
@@ -1575,13 +1578,16 @@ window.submitNewAssessment = async function() {
   } catch (e) {
     console.error(e);
     let stored = null;
+    let readFailed = false;
     if (outcomeUnknown(e)) {
       try { stored = (await db("SELECT * FROM app_dues_contributions__assessments WHERE id = ?", [id])).rows?.[0] ?? null; }
-      catch (readErr) { console.error(readErr); }
+      catch (readErr) { console.error(readErr); readFailed = true; }
     }
     if (!stored) {
       if (btn) { btn.disabled = false; btn.textContent = "Create"; }
-      hubAlert(failureLine(e, { action: "create the assessment", thing: "assessment" }));
+      // The id is ours: with the read-back failed, a UNIQUE answer may be this
+      // form's own first try, so nothing is known — "try again", not "already exists".
+      hubAlert(failureLine(readFailed ? null : e, { action: "create the assessment", thing: "assessment" }));
       return;
     }
     // An earlier attempt landed: run the success path once, with what is stored.
