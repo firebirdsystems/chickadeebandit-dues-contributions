@@ -943,24 +943,30 @@ window.submitNewPeriod = async function() {
 
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Creating…"; }
+  let created;
   try {
     const id = crypto.randomUUID();
     const result = await finance("periods", {
       action: "create", id, label, due_date: due || null, amount_due_cents: amountCents,
     });
-    const created = {
+    created = {
       id, label, dueDate: due || null, amountDueCents: amountCents,
       status: "open", allocationRules: [], skippedMemberIds: [], reconciliation: null, createdAt: result.created_at,
     };
-    data.periods.push(created);
-    selectedPeriodId = id;
-    closeModal();
-    render();
-    await announcePeriodDueDate(created);
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Create Period"; }
     console.error(e); hubAlert(failText(e, "Couldn’t create the period — try again."));
+    return;
   }
+  // The period is stored: the redraw and the event sit outside the write's try
+  // so a failure in them is not reported as a failed create.
+  data.periods.push(created);
+  selectedPeriodId = created.id;
+  closeModal();
+  try {
+    render();
+    await announcePeriodDueDate(created);
+  } catch (e) { console.error(e); }
 };
 
 window.openEditPeriodModal = function() {
@@ -1001,17 +1007,25 @@ window.submitEditPeriod = async function(periodId) {
 
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+  const newAmountCents = Number.isInteger(amountCents) ? amountCents : period.amountDueCents;
+  const prev = { ...period };
   try {
-    const newAmountCents = Number.isInteger(amountCents) ? amountCents : period.amountDueCents;
-    const prev = { ...period };
     await finance("periods", {
       action: "update", id: period.id, label,
       amount_due_cents: newAmountCents, due_date: due || null,
     });
-    period.label = label;
-    period.amountDueCents = newAmountCents;
-    period.dueDate = due || null;
-    closeModal();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Save"; }
+    console.error(e); hubAlert(failText(e, "Couldn’t save the period — try again."));
+    return;
+  }
+  // The edit is stored: the redraw and the event sit outside the write's try
+  // so a failure in them is not reported as a failed save.
+  period.label = label;
+  period.amountDueCents = newAmountCents;
+  period.dueDate = due || null;
+  closeModal();
+  try {
     render();
     // Only when the edit touched the day itself. A renamed period, or a
     // corrected amount, cannot move the calendar entry, and re-publishing for
@@ -1021,10 +1035,7 @@ window.submitEditPeriod = async function(periodId) {
       if (reason) await retractPeriodDueDate(period, reason);
       else await announcePeriodDueDate(period);
     }
-  } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = "Save"; }
-    console.error(e); hubAlert(failText(e, "Couldn’t save the period — try again."));
-  }
+  } catch (e) { console.error(e); }
 };
 
 window.deletePeriod = async function() {
@@ -1044,14 +1055,18 @@ window.deletePeriod = async function() {
   const pid = selectedPeriodId;
   try {
     await finance("periods", { action: "delete", id: pid });
-    data.periods  = data.periods.filter(p => p.id !== pid);
+  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t delete the period — try again.")); return; }
+  // The delete is stored: the redraw and the event sit outside the write's try
+  // so a failure in them is not reported as a failed delete.
+  data.periods  = data.periods.filter(p => p.id !== pid);
+  try {
     rebuildIndexes();
     selectedPeriodId = data.periods[0]?.id ?? null;
     render();
     // A deleted period's calendar entry would otherwise stand forever naming a
     // deadline nothing is behind. Only when it had one to take down.
     if (wantsDueDateEntry(period)) await retractPeriodDueDate(period, "deleted");
-  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t delete the period — try again.")); }
+  } catch (e) { console.error(e); }
 };
 
 window.closePeriod = async function() {
@@ -1068,11 +1083,16 @@ window.closePeriod = async function() {
   });
   if (!confirmed) return;
 
+  let result;
   try {
-    const result = await finance("periods", { action: "close", id: period.id });
-    period.status = "locked";
-    period.closedAt = result.closed_at;
-    period.reconciliation = result.reconciliation;
+    result = await finance("periods", { action: "close", id: period.id });
+  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t close the period — try again.")); return; }
+  // The close is stored: the redraw, the event and the report sit outside the
+  // write's try so a failure in them is not reported as a failed close.
+  period.status = "locked";
+  period.closedAt = result.closed_at;
+  period.reconciliation = result.reconciliation;
+  try {
     render();
     // The source_ref_id is what makes this a retraction as well as a
     // notification: a closed period's due date is spent, and this is the same
@@ -1086,7 +1106,7 @@ window.closePeriod = async function() {
       closed_at: result.closed_at,
     });
     openReconModal(period);
-  } catch (e) { console.error(e); hubAlert(failText(e, "Couldn’t close the period — try again.")); }
+  } catch (e) { console.error(e); }
 };
 
 window.toggleMemberSkipped = async function(memberId) {
@@ -1176,20 +1196,29 @@ window.submitPayment = async function(memberId, periodId) {
   const btn = modalEl?.querySelector(".btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
 
+  const payment = {
+    id: crypto.randomUUID(), memberId, periodId: period.id,
+    amountCents, date, postingStatus: "pending", recordedAt: new Date().toISOString(),
+  };
+  let result;
   try {
-    const payment = {
-      id: crypto.randomUUID(), memberId, periodId: period.id,
-      amountCents, date, postingStatus: "pending", recordedAt: new Date().toISOString(),
-    };
-    const result = await finance("payments", {
+    result = await finance("payments", {
       action: "create", id: payment.id, period_id: payment.periodId,
       member_id: memberId, amount_cents: amountCents, date,
     });
-    payment.postingStatus = result.posting_status;
-    payment.recordedAt = result.recorded_at;
-    data.payments.push(payment);
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Record Payment"; }
+    console.error(e); hubAlert(failText(e, "Couldn’t record the payment — try again."));
+    return;
+  }
+  // The payment is stored: the redraw and the event sit outside the write's
+  // try so a failure in them is not reported as a failed payment.
+  payment.postingStatus = result.posting_status;
+  payment.recordedAt = result.recorded_at;
+  data.payments.push(payment);
+  closeModal();
+  try {
     addPaymentToIndex(payment);
-    closeModal();
     if (period.id === selectedPeriodId) patchAfterPayment(memberId, period);
     else render();
     await publishEvent("dues.payment_recorded", payment.id, {
@@ -1199,11 +1228,8 @@ window.submitPayment = async function(memberId, periodId) {
       amount_cents: amountCents,
       date,
     });
-    if (result.warning) hubAlert(result.warning);
-  } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = "Record Payment"; }
-    console.error(e); hubAlert(failText(e, "Couldn’t record the payment — try again."));
-  }
+  } catch (e) { console.error(e); }
+  if (result.warning) hubAlert(result.warning);
 };
 
 window.deletePayment = async function(paymentId) {
