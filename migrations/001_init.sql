@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS app_dues_contributions__settings (
 );
 
 CREATE TABLE IF NOT EXISTS app_dues_contributions__periods (
-  id               TEXT PRIMARY KEY,
+  id               TEXT NOT NULL PRIMARY KEY,
   label            TEXT NOT NULL,
   due_date         TEXT,
   amount_due_cents INTEGER NOT NULL DEFAULT 0 CHECK (amount_due_cents >= 0),
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS app_dues_contributions__periods (
 );
 
 CREATE TABLE IF NOT EXISTS app_dues_contributions__payments (
-  id          TEXT PRIMARY KEY,
+  id          TEXT NOT NULL PRIMARY KEY,
   period_id   TEXT NOT NULL,
   member_id   TEXT NOT NULL,
   amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS app_dues_contributions__payments (
 );
 
 CREATE TABLE IF NOT EXISTS app_dues_contributions__assessments (
-  id         TEXT PRIMARY KEY,
+  id         TEXT NOT NULL PRIMARY KEY,
   label      TEXT NOT NULL,
   amount_cents INTEGER NOT NULL DEFAULT 0 CHECK (amount_cents > 0),
   due_date   TEXT,
